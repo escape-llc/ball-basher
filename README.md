@@ -10,7 +10,7 @@ A Babylon.js game where you control balls to bash them into targets and score po
 
 ## Features
 
-- Physics-based gameplay with Babylon.js and Cannon.js
+- Physics-based gameplay with Babylon.js and Havok Engine
 - Controllable balls with different physical properties
 - Dynamic cubes that change states (inert, hole, multipliers, power-ups)
 - Increasing difficulty over rounds
@@ -26,4 +26,6 @@ A Babylon.js game where you control balls to bash them into targets and score po
 - Rounds last 30 seconds, with increasing force multiplier and gravity
 - Extra balls are used when a ball exits the play area
 - Cubes spawn different effects: score multipliers, passive balls, gravity adjustments, extra time, extra balls
-- Game ends when no scoring objects remain in play
+- Game ends when
+  - no scoring objects remain in play
+	- no points scored for one round
