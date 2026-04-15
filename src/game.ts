@@ -11,9 +11,8 @@ import {
 	StandardMaterial, TransformNode, Animation,
 	type Mesh,
 } from "@babylonjs/core";
+declare const __VANILLA_VERSION__: string;
 
-// Ball Basher Game
-// python -m http.server 8080
 const canvas: HTMLElement|null = document.getElementById("renderCanvas");
 const engine = new Engine(canvas as HTMLCanvasElement, true);
 // UI elements
@@ -23,6 +22,9 @@ const roundElement: HTMLElement|null = document.getElementById("round");
 const ballsElement: HTMLElement|null = document.getElementById("balls");
 const startElement: HTMLElement|null = document.getElementById("startMessage")
 const gameOverElement: HTMLElement|null = document.getElementById("gameOver");
+const versionElement: HTMLElement|null = document.getElementById("version");
+
+versionElement && (versionElement.textContent = __VANILLA_VERSION__);
 
 class GameState {
 	score = 0
@@ -30,17 +32,28 @@ class GameState {
 	round = 1
 	forceMultiplier = 1
 	spawnPoolSize = 10
-	gravityMagnitude = 9
+	gravityMagnitude = 7
 	extraBalls = 2
 	gravityDirection = new Vector3(0, -0.781, -0.625)
+	lastTime = performance.now();
 	get currentGravity() {
 		return new Vector3(0, this.gravityMagnitude * this.gravityDirection.y, this.gravityMagnitude * this.gravityDirection.z)
 	}
+	getDeltaTime() {
+		const now = performance.now();
+		const delta = (now - this.lastTime) / 1000; // Convert to seconds
+		this.lastTime = now;
+		return delta;
+	}
 	startGame() {
+		this.lastTime = performance.now();
 		scene?.getPhysicsEngine()?.setGravity(gameState.currentGravity);
 		roundElement && (roundElement.textContent = this.round.toString());
 		timeElement && (timeElement.textContent = Math.ceil(this.timeRemaining).toString());
 		scoreElement && (scoreElement.textContent = this.score.toString());
+	}
+	isGameOver() {
+		return gameState.extraBalls <= 0 && controllableBalls.length === 0;
 	}
 	nextRound() {
 		this.round++;
@@ -72,11 +85,91 @@ class GameState {
 		timeElement && (timeElement.textContent = Math.ceil(this.timeRemaining).toString());
 	}
 }
+class GameObject {
+	name: string
+	mesh: Mesh
+	body: PhysicsAggregate
+	constructor(name: string, mesh: Mesh, body: PhysicsAggregate) {
+		this.name = name;
+		this.mesh = mesh;
+		this.body = body;
+	}
+}
+class ControllableBall extends GameObject {
+}
+class PassiveBall extends GameObject {
+}
+class GameCube extends GameObject {
+	spawnType: string
+	spawnTimer: number
+	isAnimating: boolean
+	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, spawnType: string, spawnTimer: number, isAnimating: boolean) {
+		super(name, mesh, body);
+		this.spawnType = spawnType;
+		this.spawnTimer = spawnTimer;
+		this.isAnimating = isAnimating;
+	}
+	update(delay: number) {
+		this.spawnTimer -= delay;
+		if (this.spawnTimer <= 0) {
+			// Select new spawn type
+			const index = Math.floor(Math.random() * Math.min(gameState.spawnPoolSize, spawnSequence.length));
+			this.spawnType = spawnSequence[index];
+			// Set duration
+			let duration;
+			switch (this.spawnType) {
+				case "Inert": duration = Math.random() * 4 + 3; break;
+				case "Hole": duration = Math.random() * 5 + 5; break;
+				default:
+					if (this.spawnType.startsWith("Multiplier")) duration = Math.random() * 5 + 5;
+					else duration = Math.random() * 7 + 3;
+					break;
+			}
+			this.spawnTimer = duration;
+			this.updateAppearance();
+		}
+	}
+	updateAppearance() {
+		if(this.isAnimating) return; // Don't change appearance while animating
+		const material = this.mesh.material;
+		switch (this.spawnType) {
+			case "Inert":
+				material.diffuseColor = new Color3(0.5, 0.5, 0.5);
+				break;
+			case "Hole":
+				if(!this.isAnimating) {
+					material.diffuseColor = new Color3(0.25, 0.25, 0.25);
+					this.isAnimating = true;
+					animateHole(this.mesh, this.spawnTimer * 1000).then(() => {
+						this.isAnimating = false;
+						this.spawnType = "Inert";
+						this.spawnTimer = 1;
+						material.diffuseColor = new Color3(0.5, 0.5, 0.5);
+					});
+				}
+				break;
+			default:
+				if (this.spawnType.startsWith("Multiplier")) {
+					const mult = parseInt(this.spawnType.split("=")[1]);
+					const hue = mult > 0 ? 240 - (mult / 32) * 120 : 0 + (Math.abs(mult) / 32) * 120;
+					material.diffuseColor = Color3.FromHSV(hue, 0.8, 0.6);
+				} else {
+					// Power ups, simple colors
+					if (this.spawnType === "Passive Ball") material.diffuseColor = new Color3(1, 1, 0);
+					else if (this.spawnType === "Gravity Adjust") material.diffuseColor = new Color3(0, 1, 1);
+					else if (this.spawnType === "Extra Time") material.diffuseColor = new Color3(1, 0, 1);
+					else if (this.spawnType === "Extra Ball") material.diffuseColor = new Color3(0, 1, 0);
+				}
+				break;
+		}
+	}
+}
+let gameObjects: Map<string, GameObject> = new Map();
 // Game variables
 let scene: Scene|undefined = undefined;
 let controllableBalls: Mesh[] = [];
 let passiveBalls: Mesh[] = [];
-let cubes: Mesh[] = [];
+let cubes: GameCube[] = [];
 let gameStarted = false;
 let gameOver = false;
 let gameState = new GameState();
@@ -97,14 +190,13 @@ let keys: Record<string, boolean> = {};
 window.addEventListener("keydown", (e) => {
 	keys[e.code] = true;
 	if (e.code === 'Space' && !gameStarted) {
-		scene && startGame(scene);
+		startGame();
 	}
 	else if(e.code === 'Space' && gameOver) {
 		gameOverElement && (gameOverElement.style.display = "none");
 		gameStarted = false;
 		startElement && (startElement.style.display = "block");
 	}
-
 });
 window.addEventListener("keyup", (e) => { keys[e.code] = false; });
 
@@ -115,7 +207,7 @@ window.addEventListener("resize", () => {
 
 // before initializing your babylon scene:
 let havokInstance;
-let guiTexture;
+let guiTexture: AdvancedDynamicTexture;
 HavokPhysics().then((havok) => {
 	// Havok is now available
 	havokInstance = havok;
@@ -132,7 +224,7 @@ HavokPhysics().then((havok) => {
 	createCubes(scene);
 	createControllableBalls(scene);
 	engine.runRenderLoop(() => {
-		renderLoop(scene);
+		scene && renderLoop(scene);
 	});
 });
 
@@ -224,12 +316,16 @@ function createControllableBalls(scene: Scene) {
 		body.body.getCollisionObservable().add(event => {
 			// Handle collisions if needed
 //			console.log("Collision detected", event);
+			if(event.type !== "COLLISION_STARTED") return;
 			const hitBody = event.collidedAgainst;
 			// 2. Access the Mesh (TransformNode) linked to that body
 			const hitMesh = hitBody.transformNode;
 			if(hitMesh.name === "floor" || hitMesh.name === "base") return;
 			// 3. Get the name
-			const spawnType = hitMesh.spawnType;
+			const obj:GameObject|undefined = gameObjects.get(hitMesh.name);
+			if (!obj) return;
+			const go = obj as GameCube;
+			const spawnType = go.spawnType;
 			console.log("I hit: " + hitMesh.name, spawnType);
 			if(!spawnType) return;
 			if (spawnType.startsWith("Multiplier")) {
@@ -243,27 +339,23 @@ function createControllableBalls(scene: Scene) {
 			} else if (spawnType === "Passive Ball") {
 				spawnPassiveBall(scene);
 				// Reset cube to inert for 5 seconds
-				cube.spawnType = "Inert";
-				cube.spawnTimer = 5;
-				//updateCubeAppearance(cube);
+				go.spawnType = "Inert";
+				go.spawnTimer = 5;
 			} else if (spawnType === "Gravity Adjust") {
 				adjustGravity(scene);
 				// Reset cube to inert for 5 seconds
-				cube.spawnType = "Inert";
-				cube.spawnTimer = 5;
-//				updateCubeAppearance(cube);
+				go.spawnType = "Inert";
+				go.spawnTimer = 5;
 			} else if (spawnType === "Extra Time") {
 				gameState.extraTime(Math.random() * 3 + 3);
 				// Reset cube to inert for 5 seconds
-				cube.spawnType = "Inert";
-				cube.spawnTimer = 5;
-//				updateCubeAppearance(cube);
+				go.spawnType = "Inert";
+				go.spawnTimer = 5;
 			} else if (spawnType === "Extra Ball") {
 				gameState.extraBalls++;
 				// Reset cube to inert for 5 seconds
-				cube.spawnType = "Inert";
-				cube.spawnTimer = 5;
-//				updateCubeAppearance(cube);
+				go.spawnType = "Inert";
+				go.spawnTimer = 5;
 			}
 		});
 		controllableBalls.push({ ball, body });
@@ -275,7 +367,8 @@ function createCubes(scene: Scene) {
 	// Left side: 10 cubes
 	const cubeProps = { mass: 0 };
 	for (let ix = 0; ix < 10; ix++) {
-		const cube = MeshBuilder.CreateBox(`cube-left-${ix}`, { size: 1 }, scene);
+		const name = `cube-left-${ix}`;
+		const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
 		cube.position.set(-10.5, 0.5, -4.5 + ix);
 		const material = new StandardMaterial(`cubeMat-left-${ix}`, scene);
 		material.diffuseColor = new Color3(0.5, 0.5, 0.5);
@@ -283,13 +376,14 @@ function createCubes(scene: Scene) {
 		const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, scene);
 		cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 		cubeBody.body.disablePreStep = false;
-		cube.spawnType = "Inert";
-		cube.spawnTimer = 5;
-		cubes.push(cube);
+		const go = new GameCube(name, cube, cubeBody, "Inert", Math.random()*2, false)
+		gameObjects.set(cube.name, go)
+		cubes.push(go);
 	}
 	// Right side: 10 cubes
 	for (let ix = 0; ix < 10; ix++) {
-		const cube = MeshBuilder.CreateBox(`cube-right-${ix}`, { size: 1 }, scene);
+		const name = `cube-right-${ix}`;
+		const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
 		cube.position.set(10.5, 0.5, -4.5 + ix);
 		const material = new StandardMaterial(`cubeMat-right-${ix}`, scene);
 		material.diffuseColor = new Color3(0.5, 0.5, 0.5);
@@ -297,13 +391,14 @@ function createCubes(scene: Scene) {
 		const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, scene);
 		cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 		cubeBody.body.disablePreStep = false;
-		cube.spawnType = "Inert";
-		cube.spawnTimer = 5;
-		cubes.push(cube);
+		const go = new GameCube(name, cube, cubeBody, "Inert", Math.random()*2, false);
+		gameObjects.set(cube.name, go);
+		cubes.push(go);
 	}
 	// Top side: 22 cubes
 	for (let ix = 0; ix < 22; ix++) {
-		const cube = MeshBuilder.CreateBox(`cube-top-${ix}`, { size: 1 }, scene);
+		const name = `cube-top-${ix}`;
+		const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
 		cube.position.set(-10.5 + ix, 0.5, 5.5);
 		const material = new StandardMaterial(`cubeMat-top-${ix}`, scene);
 		material.diffuseColor = new Color3(0.5, 0.5, 0.5);
@@ -312,9 +407,9 @@ function createCubes(scene: Scene) {
 		cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 		// TODO only enable this while animating
 		cubeBody.body.disablePreStep = false;
-		cube.spawnType = "Inert";
-		cube.spawnTimer = 5;
-		cubes.push(cube);
+		const go = new GameCube(name, cube, cubeBody, "Inert", Math.random()*2, false);
+		gameObjects.set(cube.name, go);
+		cubes.push(go);
 	}
 }
 
@@ -346,65 +441,6 @@ function animateHole(mesh: Mesh, delayMs: number) {
 			}, delayMs);
 		});
 	});
-}
-
-// Update cubes
-function updateCubes(deltaTime: number) {
-	cubes.forEach(cube => {
-		cube.spawnTimer -= deltaTime;
-		if (cube.spawnTimer <= 0) {
-			// Select new spawn type
-			const index = Math.floor(Math.random() * Math.min(gameState.spawnPoolSize, spawnSequence.length));
-			cube.spawnType = spawnSequence[index];
-			// Set duration
-			let duration;
-			switch (cube.spawnType) {
-				case "Inert": duration = Math.random() * 4 + 3; break;
-				case "Hole": duration = Math.random() * 5 + 5; break;
-				default:
-					if (cube.spawnType.startsWith("Multiplier")) duration = Math.random() * 5 + 5;
-					else duration = Math.random() * 7 + 3;
-					break;
-			}
-			cube.spawnTimer = duration;
-			updateCubeAppearance(cube);
-		}
-	});
-}
-
-function updateCubeAppearance(cube: Mesh) {
-	if(cube.isAnimating) return; // Don't change appearance while animating
-	const material = cube.material;
-	switch (cube.spawnType) {
-		case "Inert":
-			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-			break;
-		case "Hole":
-			if(!cube.isAnimating) {
-				material.diffuseColor = new Color3(0.25, 0.25, 0.25);
-				cube.isAnimating = true;
-				animateHole(cube, cube.spawnTimer * 1000).then(() => {
-					cube.isAnimating = false;
-					cube.spawnType = "Inert";
-					cube.spawnTimer = 1;
-					material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-				});
-			}
-			break;
-		default:
-			if (cube.spawnType.startsWith("Multiplier")) {
-				const mult = parseInt(cube.spawnType.split("=")[1]);
-				const hue = mult > 0 ? 240 - (mult / 32) * 120 : 0 + (Math.abs(mult) / 32) * 120;
-				material.diffuseColor = Color3.FromHSV(hue, 0.8, 0.6);
-			} else {
-				// Power ups, simple colors
-				if (cube.spawnType === "Passive Ball") material.diffuseColor = new Color3(1, 1, 0);
-				else if (cube.spawnType === "Gravity Adjust") material.diffuseColor = new Color3(0, 1, 1);
-				else if (cube.spawnType === "Extra Time") material.diffuseColor = new Color3(1, 0, 1);
-				else if (cube.spawnType === "Extra Ball") material.diffuseColor = new Color3(0, 1, 0);
-			}
-			break;
-	}
 }
 
 // Apply force to controllable balls
@@ -446,7 +482,7 @@ function adjustGravity(scene: Scene) {
 	gameState.adjustGravity(new Vector3(gmx, 0, gmz));
 }
 
-function startGame(scene: Scene) {
+function startGame() {
 	gameStarted = true;
 	gameOver = false;
 	startElement && (startElement.style.display = "none");
@@ -455,19 +491,14 @@ function startGame(scene: Scene) {
 	gameState.startGame();
 }
 
-let lastTime = performance.now();
 function renderLoop(scene: Scene) {
 	if (!gameStarted || gameOver) {
 		scene.render();
 		return;
 	}
-	const currentTime = performance.now();
-	const deltaTime = (currentTime - lastTime) / 1000;
-	lastTime = currentTime;
-
+	const deltaTime = gameState.getDeltaTime();
 	applyForce();
-	updateCubes(deltaTime);
-
+	cubes.forEach(cube => cube.update(deltaTime));
 	gameState.updateTimeRemaining(deltaTime);
 
 	// Check if balls are out
@@ -488,9 +519,8 @@ function renderLoop(scene: Scene) {
 		return true;
 	});
 	ballsElement && (ballsElement.textContent = (controllableBalls.length + gameState.extraBalls).toString());
-
 	scene.render();
-	if(gameState.extraBalls <= 0 && controllableBalls.length === 0) {
+	if(gameState.isGameOver()) {
 		gameOver = true;
 		gameOverElement && (gameOverElement.style.display = "block");
 	}
