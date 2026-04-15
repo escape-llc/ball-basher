@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="icon" type="image/png" href="/bb_64.png" />
+	<title>Ball Basher</title>
+	<style>
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			font-family: Arial, sans-serif;
+		}
+
+		#renderCanvas {
+			width: 100%;
+			height: 100vh;
+			display: block;
+		}
+
+		#startMessage,
+		#gameOver {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			color: white;
+			font-size: 24px;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 20px;
+			border-radius: 10px;
+			text-align: center;
+		}
+
+		#ui {
+			position: absolute;
+			top: .25rem;
+			left: .5rem;
+			color: white;
+			width: 100%;
+			display: flex;
+			flex-direction: row;
+			gap: 1.5rem;
+		}
+
+		.pill {
+			background: rgba(0, 0, 0, 0.8);
+			font-size: 22px;
+			padding: 4px 8px;
+			border-radius: 8px;
+			border: 2px solid rgba(128, 128, 128, 0.8);
+			display: inline-block;
+		}
+
+		.label {
+			margin-right: 1rem;
+			font-weight: normal;
+			color: gray;
+		}
+
+		.value {
+			font-weight: bold;
+		}
+
+		.right-side {
+			margin-left: auto;
+			margin-right: 3rem;
+		}
+	</style>
+</head>
+
+<body>
+	<canvas id="renderCanvas"></canvas>
+	<div id="ui">
+		<div class="left-side">
+			<div class="pill"><span class="label">Score </span><span class="value" id="score">0</span></div>
+			<div class="pill"><span class="label">Balls </span><span class="value" id="balls" style="width:3rem">3</span>
+			</div>
+		</div>
+		<div class="right-side">
+			<div class="pill"><span class="label">Version </span><span class="value" id="version" style="width:3rem">1</span>
+			</div>
+			<div class="pill"><span class="label">Round </span><span class="value" id="round" style="width:3rem">1</span>
+			</div>
+			<div class="pill"><span class="label">Time </span><span class="value" id="time"
+					style="width:3rem;max-width:3rem">30</span></div>
+		</div>
+	</div>
+	<div id="startMessage">Press SPACE to start the game</div>
+	<div id="gameOver" style="display:none">Game Over</div>
+	<script type="module" src="./src/game.ts"></script>
+</body>
+
+</html>
