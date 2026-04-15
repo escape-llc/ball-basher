@@ -10,6 +10,7 @@ import {
 	Color3, Color4, FreeCamera, HemisphericLight, MeshBuilder, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, TransformNode, Animation,
 	type Mesh,
+	type IPhysicsCollisionEvent,
 } from "@babylonjs/core";
 declare const __VANILLA_VERSION__: string;
 
@@ -89,15 +90,30 @@ class GameObject {
 	name: string
 	mesh: Mesh
 	body: PhysicsAggregate
+	disposed: boolean = false
 	constructor(name: string, mesh: Mesh, body: PhysicsAggregate) {
 		this.name = name;
 		this.mesh = mesh;
 		this.body = body;
 	}
+	dispose() {
+		this.mesh.dispose();
+		this.body.dispose();
+		this.disposed = true;
+	}
 }
 class ControllableBall extends GameObject {
+	constructor(name: string, mesh: Mesh, body: PhysicsAggregate) {
+		super(name, mesh, body);
+	}
+	applyImpulse(forceVector: Vector3) {
+		this.body.body.applyImpulse(forceVector, this.mesh.getAbsolutePosition());
+	}
 }
 class PassiveBall extends GameObject {
+	constructor(name: string, mesh: Mesh, body: PhysicsAggregate) {
+		super(name, mesh, body);
+	}
 }
 class GameCube extends GameObject {
 	spawnType: string
@@ -163,12 +179,44 @@ class GameCube extends GameObject {
 				break;
 		}
 	}
+	collisionAction(event: IPhysicsCollisionEvent, scene: Scene, gameState: GameState) {
+		if(!this.spawnType) return;
+		if (this.spawnType.startsWith("Multiplier")) {
+			const mult = parseInt(this.spawnType.split("=")[1]);
+			const force = event.impulse;
+			const points = Math.round(force * mult);
+			gameState.scorePoints(points);
+			createScoreLabel(points.toString(), event.point.clone(), 1000);
+			// Display score text (simplified)
+			//console.log("+" + points);
+		} else if (this.spawnType === "Passive Ball") {
+			spawnPassiveBall(scene);
+			// Reset cube to inert for 5 seconds
+			this.spawnType = "Inert";
+			this.spawnTimer = 5;
+		} else if (this.spawnType === "Gravity Adjust") {
+			adjustGravity();
+			// Reset cube to inert for 5 seconds
+			this.spawnType = "Inert";
+			this.spawnTimer = 5;
+		} else if (this.spawnType === "Extra Time") {
+			gameState.extraTime(Math.random() * 3 + 3);
+			// Reset cube to inert for 5 seconds
+			this.spawnType = "Inert";
+			this.spawnTimer = 5;
+		} else if (this.spawnType === "Extra Ball") {
+			gameState.extraBalls++;
+			// Reset cube to inert for 5 seconds
+			this.spawnType = "Inert";
+			this.spawnTimer = 5;
+		}
+	}
 }
 let gameObjects: Map<string, GameObject> = new Map();
 // Game variables
 let scene: Scene|undefined = undefined;
-let controllableBalls: Mesh[] = [];
-let passiveBalls: Mesh[] = [];
+let controllableBalls: ControllableBall[] = [];
+let passiveBalls: PassiveBall[] = [];
 let cubes: GameCube[] = [];
 let gameStarted = false;
 let gameOver = false;
@@ -302,9 +350,10 @@ function createControllableBalls(scene: Scene) {
 	const friction = [0.2, 0.3, 0.4];
 	const linearDamping = [0.2, 0.3, 0.5];
 	for (let ix = 0; ix < 3; ix++) {
-		const ball = MeshBuilder.CreateSphere("ball" + ix, { diameter: diameters[ix] }, scene);
+		const name = "ball" + ix
+		const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, scene);
 		ball.position.set(ix, 2, 0);
-		const material = new StandardMaterial("ballMat" + ix, scene);
+		const material = new StandardMaterial("Mat-" + name, scene);
 		// Color code based on physics, e.g., hue based on mass
 		material.diffuseColor = Color3.FromHSV(hue[ix], restitution[ix], friction[ix]);
 		ball.material = material;
@@ -314,51 +363,21 @@ function createControllableBalls(scene: Scene) {
 		const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, scene);
 		body.body.setCollisionCallbackEnabled(true);
 		body.body.getCollisionObservable().add(event => {
-			// Handle collisions if needed
-//			console.log("Collision detected", event);
+			//console.log("Collision detected", event);
 			if(event.type !== "COLLISION_STARTED") return;
 			const hitBody = event.collidedAgainst;
-			// 2. Access the Mesh (TransformNode) linked to that body
+			// Access the Mesh (TransformNode) linked to that body
 			const hitMesh = hitBody.transformNode;
 			if(hitMesh.name === "floor" || hitMesh.name === "base") return;
-			// 3. Get the name
+			// look up object
 			const obj:GameObject|undefined = gameObjects.get(hitMesh.name);
 			if (!obj) return;
 			const go = obj as GameCube;
-			const spawnType = go.spawnType;
-			console.log("I hit: " + hitMesh.name, spawnType);
-			if(!spawnType) return;
-			if (spawnType.startsWith("Multiplier")) {
-				const mult = parseInt(spawnType.split("=")[1]);
-				const force = event.impulse;
-				const points = Math.round(force * mult);
-				gameState.scorePoints(points);
-				createScoreLabel(points.toString(), event.point.clone(), 1000);
-				// Display score text (simplified)
-				//console.log("+" + points);
-			} else if (spawnType === "Passive Ball") {
-				spawnPassiveBall(scene);
-				// Reset cube to inert for 5 seconds
-				go.spawnType = "Inert";
-				go.spawnTimer = 5;
-			} else if (spawnType === "Gravity Adjust") {
-				adjustGravity(scene);
-				// Reset cube to inert for 5 seconds
-				go.spawnType = "Inert";
-				go.spawnTimer = 5;
-			} else if (spawnType === "Extra Time") {
-				gameState.extraTime(Math.random() * 3 + 3);
-				// Reset cube to inert for 5 seconds
-				go.spawnType = "Inert";
-				go.spawnTimer = 5;
-			} else if (spawnType === "Extra Ball") {
-				gameState.extraBalls++;
-				// Reset cube to inert for 5 seconds
-				go.spawnType = "Inert";
-				go.spawnTimer = 5;
-			}
+			//const spawnType = go.spawnType;
+			//console.log("hit: " + hitMesh.name, spawnType);
+			go.collisionAction(event, scene, gameState);
 		});
-		controllableBalls.push({ ball, body });
+		controllableBalls.push(new ControllableBall(name, ball, body));
 	}
 }
 
@@ -455,15 +474,7 @@ function applyForce() {
 	if (keys.ArrowDown || keys.KeyS) forceVector.z = -1;
 	forceVector.scaleInPlace(gameState.forceMultiplier * 2); // Minimal force
 	if (forceVector.length() < 0.01) return; // Dead zone
-	controllableBalls.forEach(ball => {
-		const body = ball.body.body;
-		// Only apply force if ball is on the ground
-		//const radius = ball.diameter / 2;
-//		console.log("Ball Y:", ball.position.y, "Radius:", ball);
-		//        if (ball.position.y <= radius + 0.1) {
-		body.applyImpulse(forceVector, ball.ball.getAbsolutePosition());
-		//        }
-	});
+	controllableBalls.forEach(ball => { ball.applyImpulse(forceVector); });
 }
 
 function spawnPassiveBall(scene: Scene) {
@@ -472,11 +483,28 @@ function spawnPassiveBall(scene: Scene) {
 	const material = new StandardMaterial("passiveMat", scene);
 	material.diffuseColor = Color3.FromHSV(Math.random() * 360, 0.8, 0.6);
 	ball.material = material;
-//	ball.physicsImpostor = new PhysicsImpostor(ball, BABYLON.PhysicsImpostor.SphereImpostor, { mass: Math.random() * 0.5 + 0.1, restitution: 0.5, linearDamping: 0.2, angularDamping: 0.2, friction: 0.2 }, scene);
-	passiveBalls.push(ball);
+	const ballProps = { mass: Math.random() * 0.5 + 0.1, restitution: 0.5, linearDamping: 0.2, angularDamping: 0.2, friction: 0.2 }
+	const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, scene);
+	body.body.setCollisionCallbackEnabled(true);
+	body.body.getCollisionObservable().add(event => {
+		//console.log("Collision detected", event);
+		if(event.type !== "COLLISION_STARTED") return;
+		const hitBody = event.collidedAgainst;
+		// Access the Mesh (TransformNode) linked to that body
+		const hitMesh = hitBody.transformNode;
+		if(hitMesh.name === "floor" || hitMesh.name === "base") return;
+		// look up object
+		const obj:GameObject|undefined = gameObjects.get(hitMesh.name);
+		if (!obj) return;
+		const go = obj as GameCube;
+		//const spawnType = go.spawnType;
+		//console.log("hit: " + hitMesh.name, spawnType);
+		go.collisionAction(event, scene, gameState);
+	});
+	passiveBalls.push(new PassiveBall("passiveBall", ball, body));
 }
 
-function adjustGravity(scene: Scene) {
+function adjustGravity() {
 	const gmx = (Math.random() - 0.5) * 2;
 	const gmz = (Math.random() - 0.5) * 2;
 	gameState.adjustGravity(new Vector3(gmx, 0, gmz));
@@ -503,18 +531,24 @@ function renderLoop(scene: Scene) {
 
 	// Check if balls are out
 	controllableBalls = controllableBalls.filter(ball => {
-		if (ball.ball.position.y < -2 || Math.abs(ball.ball.position.x) > 11 || Math.abs(ball.ball.position.z) > 5) {
+		if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 12 || Math.abs(ball.mesh.position.z) > 6) {
 			if (gameState.extraBalls > 0) {
 				gameState.extraBalls--;
-				ball.ball.position.set(0, 2, 0);
+				ball.mesh.position.set(0, 2, 0);
 				const body = ball.body.body;
 				body.setLinearVelocity(Vector3.Zero());
 				return true;
 			} else {
-				ball.ball.dispose();
-				ball.body.dispose();
+				ball.dispose();
 				return false;
 			}
+		}
+		return true;
+	});
+	passiveBalls = passiveBalls.filter(ball => {
+		if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 12 || Math.abs(ball.mesh.position.z) > 6) {
+			ball.dispose();
+			return false;
 		}
 		return true;
 	});
