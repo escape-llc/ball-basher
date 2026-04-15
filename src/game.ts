@@ -354,8 +354,8 @@ function createControllableBalls(scene: Scene) {
 		const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, scene);
 		ball.position.set(ix, 2, 0);
 		const material = new StandardMaterial("Mat-" + name, scene);
-		// Color code based on physics, e.g., hue based on mass
-		material.diffuseColor = Color3.FromHSV(hue[ix], restitution[ix], friction[ix]);
+		material.diffuseColor = Color3.FromHSV(hue[ix], 0.7, 0.3);
+		material.emissiveColor = new Color3(0.3, 0.3, 0.3);
 		ball.material = material;
 		const ballProps = {
 			mass: masses[ix], restitution: restitution[ix], linearDamping: linearDamping[ix], angularDamping: 0.2, friction: friction[ix]
