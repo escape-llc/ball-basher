@@ -48,11 +48,18 @@ class GameController implements IGameController {
 		this.scene = scene;
 		this.state = new GameState(uim, this);
 		this.havok = havok;
-		const camera = createCamera(scene);
+		const camera = this.createCamera(scene);
 		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene);
 		this.camera = camera;
 		this.light = light;
 		this.uim = uim;
+	}
+	private createCamera(scene: Scene) {
+		// Camera
+		const camera = new FreeCamera("camera", new Vector3(0, 16, 6), scene);
+		camera.setTarget(new Vector3(0, 0, 0));
+		camera.rotation.z = Math.PI; // Rotate 180 degrees around Z axis
+		return camera;
 	}
 	startGame(): void {
 		this.gameStarted = true;
@@ -62,6 +69,12 @@ class GameController implements IGameController {
 		if(!this.scene) return;
 		this.state = new GameState(this.uim, this);
 		this.state.startGame();
+		this.controllableBalls.forEach(ball => ball.respawn());
+		this.cubes.forEach(cube => {
+			cube.spawnType = "Inert";
+			cube.spawnTimer = Math.random() * 2;
+			cube.updateAppearance();
+		});
 	}
 	pauseGame(): void {
 		throw new Error("Method not implemented.");
@@ -109,17 +122,17 @@ class GameController implements IGameController {
 	adjustGravity(): void {
 		const gmx = (Math.random() - 0.5) * 2;
 		const gmz = (Math.random() - 0.5) * 2;
-		this.state?.adjustGravity(new Vector3(gmx, 0, gmz));
+		this.state.adjustGravity(new Vector3(gmx, 0, gmz));
 	}
 	startGameLoop(): void {
 		engine.runRenderLoop(() => {
-			this.scene && this.renderLoop();
+			this.renderLoop();
 		});
 	}
-	createGameObjects(): void {
+	async createGameObjects(): Promise<void> {
 		this.createPlayArea();
-		this.createCubes(this.scene);
-		this.createControllableBalls(this.scene);
+		this.createCubes();
+		this.createControllableBalls();
 	}
 	private createPlayArea(): void {
 		// Floor
@@ -144,17 +157,17 @@ class GameController implements IGameController {
 		const baseProps = { mass: 0, restitution: 0.9 };
 		const baseAggregate = new PhysicsAggregate(base, PhysicsShapeType.BOX, baseProps, this.scene);
 	}
-	private createCubes(scene: Scene) {
+	private createCubes() {
 		// Left side: 10 cubes
 		const cubeProps = { mass: 0 };
 		for (let ix = 0; ix < 10; ix++) {
 			const name = `cube-left-${ix}`;
-			const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
+			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(-10.5, 0.5, -4.5 + ix);
-			const material = new StandardMaterial(`cubeMat-left-${ix}`, scene);
+			const material = new StandardMaterial(`cubeMat-left-${ix}`, this.scene);
 			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
 			cube.material = material;
-			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, scene);
+			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
 			const go = new GameCube(name, cube, cubeBody, this, "Inert", Math.random()*2, false);
@@ -164,12 +177,12 @@ class GameController implements IGameController {
 		// Right side: 10 cubes
 		for (let ix = 0; ix < 10; ix++) {
 			const name = `cube-right-${ix}`;
-			const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
+			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(10.5, 0.5, -4.5 + ix);
-			const material = new StandardMaterial(`cubeMat-right-${ix}`, scene);
+			const material = new StandardMaterial(`cubeMat-right-${ix}`, this.scene);
 			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
 			cube.material = material;
-			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, scene);
+			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
 			const go = new GameCube(name, cube, cubeBody, this, "Inert", Math.random()*2, false);
@@ -179,12 +192,12 @@ class GameController implements IGameController {
 		// Top side: 22 cubes
 		for (let ix = 0; ix < 22; ix++) {
 			const name = `cube-top-${ix}`;
-			const cube = MeshBuilder.CreateBox(name, { size: 1 }, scene);
+			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(-10.5 + ix, 0.5, 5.5);
-			const material = new StandardMaterial(`cubeMat-top-${ix}`, scene);
+			const material = new StandardMaterial(`cubeMat-top-${ix}`, this.scene);
 			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
 			cube.material = material;
-			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, scene);
+			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			// TODO only enable this while animating
 			cubeBody.body.disablePreStep = false;
@@ -193,7 +206,7 @@ class GameController implements IGameController {
 			this.cubes.push(go);
 		}
 	}
-	private createControllableBalls(scene: Scene) {
+	private createControllableBalls(): void {
 		const hue = [10, 180, 280];
 		const diameters = [0.9, 0.7, 0.5];
 		const masses = [14, 9, 7];
@@ -202,22 +215,24 @@ class GameController implements IGameController {
 		const linearDamping = [0.2, 0.3, 0.5];
 		for (let ix = 0; ix < 3; ix++) {
 			const name = "ball" + ix
-			const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, scene);
+			const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, this.scene);
+			const spawn = new Vector3(ix, 2, 0);
 			ball.position.set(ix, 2, 0);
-			const material = new StandardMaterial("Mat-" + name, scene);
+			const material = new StandardMaterial("Mat-" + name, this.scene);
 			material.diffuseColor = Color3.FromHSV(hue[ix], 0.7, 0.6);
 	//		material.emissiveColor = new Color3(0.3, 0.3, 0.3);
 			ball.material = material;
 			const ballProps = {
 				mass: masses[ix], restitution: restitution[ix], linearDamping: linearDamping[ix], angularDamping: 0.2, friction: friction[ix]
 			};
-			const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, scene);
+			const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, this.scene);
 			body.body.setCollisionCallbackEnabled(true);
 			body.body.getCollisionObservable().add(event => {
 				//console.log("Collision detected", event);
 				this.commonCollisionAction(event);
 			});
 			const go = new ControllableBall(name, ball, body, this)
+			go.spawnPosition = spawn;
 			this.gameObjects.set(name, go)
 			this.controllableBalls.push(go);
 		}
@@ -233,53 +248,58 @@ class GameController implements IGameController {
 		this.state.updateTimeRemaining(deltaTime);
 
 		// Check if balls are out
-		this.controllableBalls = this.controllableBalls.filter(ball => {
-			if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 12 || Math.abs(ball.mesh.position.z) > 6) {
+		this.controllableBalls.forEach(ball => {
+			if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 13 || Math.abs(ball.mesh.position.z) > 7) {
 				if (this.state.extraBalls > 0) {
 					this.state.extraBalls--;
-					ball.mesh.position.set(0, 2, 0);
-					const body = ball.body.body;
-					body.setLinearVelocity(Vector3.Zero());
-					return true;
+					ball.respawn();
+					this.uim.balls(this.state.extraBalls);
 				} else {
-					ball.dispose();
-					return false;
+					ball.setEnabled(false);
+//					ball.dispose();
 				}
 			}
-			return true;
 		});
 		this.passiveBalls = this.passiveBalls.filter(ball => {
-			if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 12 || Math.abs(ball.mesh.position.z) > 6) {
+			if (ball.mesh.position.y < -2 || Math.abs(ball.mesh.position.x) > 13 || Math.abs(ball.mesh.position.z) > 7) {
 				ball.dispose();
 				return false;
 			}
 			return true;
 		});
-		this.uim.balls(this.controllableBalls.length + this.state.extraBalls);
 		this.scene?.render();
 		if(this.state.isGameOver()) {
 			this.gameOver = true;
 			this.uim.gameOver(true);
 		}
 	}
+	private static createScene(physicsPlugin: HavokPlugin) {
+		// Create scene
+		const scene = new Scene(engine);
+		scene.clearColor = new Color4(0, 0, 0, 1);
+
+		// Enable physics
+		scene.enablePhysics(new Vector3(0, 0, 0), physicsPlugin);
+		return scene;
+	}
 	static async initialize(): Promise<GameController> {
 		const havok = await HavokPhysics();
 		const havokPlugin = new HavokPlugin(true, havok);
-		const scene = createScene(havokPlugin);
+		const scene = GameController.createScene(havokPlugin);
 		setGuiTexture(AdvancedDynamicTexture.CreateFullscreenUI("UI"));
 //		const camera = createCamera(scene);
 //		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene);
 		const gc = new GameController(scene, havokPlugin, uim);
-		gc.createGameObjects();
+		await gc.createGameObjects();
 		return gc;
 	}
 }
 
-let game: GameController = await GameController.initialize();
+const game: GameController = await GameController.initialize();
 
 // Input
-let forceVector = new Vector3(0, 0, 0)
-let keys: Record<string, boolean> = {}
+const forceVector = new Vector3(0, 0, 0)
+const keys: Record<string, boolean> = {}
 
 // Event listeners
 window.addEventListener("keydown", (e) => {
@@ -303,22 +323,6 @@ window.addEventListener("resize", () => {
 
 game.startGameLoop();
 
-function createScene(physicsPlugin: HavokPlugin) {
-	// Create scene
-	const scene = new Scene(engine);
-	scene.clearColor = new Color4(0, 0, 0, 1);
-
-	// Enable physics
-	scene.enablePhysics(new Vector3(0, 0, 0), physicsPlugin);
-	return scene;
-}
-function createCamera(scene: Scene) {
-	// Camera
-	const camera = new FreeCamera("camera", new Vector3(0, 16, 6), scene);
-	camera.setTarget(new Vector3(0, 0, 0));
-	camera.rotation.z = Math.PI; // Rotate 180 degrees around Z axis
-	return camera;
-}
 // Apply force to controllable balls
 function applyForce() {
 	// Simple input handling

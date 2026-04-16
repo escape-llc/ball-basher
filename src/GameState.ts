@@ -33,9 +33,10 @@ export class GameState {
 		this.uim.round(this.round);
 		this.uim.timeRemaining(this.timeRemaining);
 		this.uim.score(this.score);
+		this.uim.balls(this.extraBalls);
 	}
 	isGameOver() {
-		return this.extraBalls <= 0 && this.igc.controllableBalls.length === 0;
+		return this.extraBalls <= 0 && this.igc.controllableBalls.filter(ball => ball.mesh.isEnabled()).length === 0;
 	}
 	nextRound() {
 		this.round++;

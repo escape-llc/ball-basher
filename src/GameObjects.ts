@@ -54,16 +54,30 @@ export class GameObject {
 		this.body.dispose();
 		this.disposed = true;
 	}
+	setEnabled(enabled: boolean) {
+		if(this.disposed) return;
+		this.mesh.setEnabled(enabled);
+	}
 }
 export class ControllableBall extends GameObject {
+	spawnPosition: Vector3 = new Vector3(0, 2, 0);
 	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, igc: IGameController) {
 		super(name, mesh, body, igc);
 	}
 	applyImpulse(forceVector: Vector3) {
 		this.body.body.applyImpulse(forceVector, this.mesh.getAbsolutePosition());
 	}
+	respawn() {
+		this.setEnabled(false);
+		this.body.body.disablePreStep = true;
+		this.body.body.setLinearVelocity(Vector3.Zero());
+		this.mesh.position.copyFrom(this.spawnPosition);
+		this.setEnabled(true);
+		this.body.body.disablePreStep = false;
+	}
 }
 export class PassiveBall extends GameObject {
+	spawnPosition: Vector3 = new Vector3(0, 2, 0);
 	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, igc: IGameController) {
 		super(name, mesh, body, igc);
 	}
