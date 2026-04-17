@@ -22,7 +22,7 @@ export class GameState {
 		this.igs = igs;
 	}
 	get currentGravity() {
-		return new Vector3(0, this.gravityMagnitude * this.gravityDirection.y, this.gravityMagnitude * this.gravityDirection.z)
+		return new Vector3(this.gravityMagnitude * this.gravityDirection.x, this.gravityMagnitude * this.gravityDirection.y, this.gravityMagnitude * this.gravityDirection.z)
 	}
 	getDeltaTime() {
 		const now = performance.now();
@@ -39,7 +39,7 @@ export class GameState {
 		return this.extraBalls <= 0 && this.igc.controllableBalls.filter(ball => ball.mesh.isEnabled()).length === 0;
 	}
 	nextRound() {
-		if(this.scoreThisRound === 0) {
+		if(this.scoreThisRound <= 0) {
 			this.timeRemaining = 0;
 			this.extraBalls = 0;
 			this.igc.controllableBalls.forEach(ball => ball.mesh.setEnabled(false));
@@ -52,6 +52,7 @@ export class GameState {
 		this.forceMultiplier *= 1.05;
 		this.spawnPoolSize++;
 		this.gravityMagnitude *= 0.95;
+		this.gravityDirection.x += Math.random()*0.2 - 0.1;
 		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
 		this.igs.gameStateEvent("nextRound", this);
 	}

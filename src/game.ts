@@ -7,15 +7,16 @@ import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import HavokPhysics from "@babylonjs/havok";
 import  { AdvancedDynamicTexture } from "@babylonjs/gui";
 import {
-	Color3, Color4, FreeCamera, HemisphericLight, MeshBuilder, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
+	Color3, Color4, FreeCamera, HemisphericLight, Material, Mesh, MeshBuilder, NodeMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, 
 	type IPhysicsCollisionEvent,
-	type Vector,
 } from "@babylonjs/core";
 import { setGuiTexture, UIManager } from "./UIManager";
 import { GameState, type IGameStateListener } from "./GameState";
 import { GameObject, ControllableBall, GameCube, PassiveBall } from "./GameObjects";
 import type { IGameController } from "./GameController";
+import cubeMaterial from "./assets/cubeMaterial.json";
+
 declare const __VANILLA_VERSION__: string;
 
 const canvas: HTMLElement|null = document.getElementById("renderCanvas");
@@ -48,6 +49,7 @@ class GameController implements IGameController, IGameStateListener {
 	private uim: UIManager
 	private floorColor: Color3 = Color3.FromHSV(20, 0.75, 0.6);
 	private floorMaterial: StandardMaterial|null = null;
+	private cubeMaterial: NodeMaterial|null = null;
 	constructor(scene: Scene, havok: HavokPlugin, uim: UIManager) {
 		this.scene = scene;
 		this.state = new GameState(this, this);
@@ -171,6 +173,9 @@ class GameController implements IGameController, IGameStateListener {
 		});
 	}
 	async createGameObjects(): Promise<void> {
+		const mat = await NodeMaterial.Parse(cubeMaterial, this.scene);
+		console.log("Parsed material", mat);
+		this.cubeMaterial = mat;
 		this.createPlayArea();
 		this.createCubes();
 		this.createControllableBalls();
@@ -198,16 +203,28 @@ class GameController implements IGameController, IGameStateListener {
 		const baseProps = { mass: 0, restitution: 0.9 };
 		const baseAggregate = new PhysicsAggregate(base, PhysicsShapeType.BOX, baseProps, this.scene);
 	}
+	private createCubeMaterial(name: string, neutral: Color3): Material {
+		if(this.cubeMaterial) {
+			const  mx: NodeMaterial = this.cubeMaterial.clone(name + "-Mat");
+			const colorBlock = mx.getBlockByName("BaseColor");
+			colorBlock && (colorBlock.value = neutral); // Change to red
+			return mx;
+		}
+		else {
+			const material = new StandardMaterial(name + "-Mat", this.scene);
+			material.diffuseColor = neutral;
+			return material;
+		}
+	}
 	private createCubes() {
 		// Left side: 10 cubes
 		const cubeProps = { mass: 0 };
+		const neutral = new Color3(0.5, 0.5, 0.5)
 		for (let ix = 0; ix < 10; ix++) {
 			const name = `cube-left-${ix}`;
 			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(-10.5, 0.5, -4.5 + ix);
-			const material = new StandardMaterial(`cubeMat-left-${ix}`, this.scene);
-			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-			cube.material = material;
+			cube.material = this.createCubeMaterial(name, neutral);
 			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
@@ -220,9 +237,7 @@ class GameController implements IGameController, IGameStateListener {
 			const name = `cube-right-${ix}`;
 			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(10.5, 0.5, -4.5 + ix);
-			const material = new StandardMaterial(`cubeMat-right-${ix}`, this.scene);
-			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-			cube.material = material;
+			cube.material = this.createCubeMaterial(name, neutral);
 			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
@@ -235,9 +250,7 @@ class GameController implements IGameController, IGameStateListener {
 			const name = `cube-top-${ix}`;
 			const cube = MeshBuilder.CreateBox(name, { size: 1 }, this.scene);
 			cube.position.set(-10.5 + ix, 0.5, 5.5);
-			const material = new StandardMaterial(`cubeMat-top-${ix}`, this.scene);
-			material.diffuseColor = new Color3(0.5, 0.5, 0.5);
-			cube.material = material;
+			cube.material = this.createCubeMaterial(name, neutral);
 			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			// TODO only enable this while animating

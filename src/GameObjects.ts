@@ -2,9 +2,11 @@ import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import {
 	Color3, PhysicsAggregate, StandardMaterial, Animation,
 	type Mesh, type IPhysicsCollisionEvent,
+	Material,
+	NodeMaterial,
 } from "@babylonjs/core";
 import type { IGameController } from "./GameController";
-import { createScoreLabel } from "./UIManager";
+import { createLabelAt as createLabelAt } from "./UIManager";
 
 /**
  * @param {BABYLON.Mesh} mesh - The visual mesh linked to the body
@@ -112,23 +114,33 @@ export class GameCube extends GameObject {
 			this.updateAppearance();
 		}
 	}
+	setColor(mat: Material, color: Color3): void {
+		if(!mat) return;
+		if(mat instanceof StandardMaterial) {
+			mat.diffuseColor = color;
+		}
+		else if(mat instanceof NodeMaterial) {
+			const colorBlock = mat.getBlockByName("BaseColor");
+			colorBlock && (colorBlock.value = color);
+		}
+	}
 	updateAppearance() {
 		if(this.isAnimating) return; // Don't change appearance while animating
 		const material = this.mesh.material;
-		if(!material || !(material instanceof StandardMaterial)) return;
+		if(!material) return;
 		switch (this.spawnType) {
 			case "Inert":
-				material.diffuseColor = new Color3(0.5, 0.5, 0.5);
+				this.setColor(material, new Color3(0.5, 0.5, 0.5));
 				break;
 			case "Hole":
 				if(!this.isAnimating) {
-					material.diffuseColor = new Color3(0.25, 0.25, 0.25);
+					this.setColor(material, new Color3(0.25, 0.25, 0.25));
 					this.isAnimating = true;
 					animateHole(this.mesh, this.spawnTimer * 1000).then(() => {
 						this.isAnimating = false;
 						this.spawnType = "Inert";
 						this.spawnTimer = 1;
-						material.diffuseColor = new Color3(0.5, 0.5, 0.5);
+						this.setColor(material, new Color3(0.5, 0.5, 0.5));
 					});
 				}
 				break;
@@ -136,13 +148,13 @@ export class GameCube extends GameObject {
 				if (this.spawnType.startsWith("Multiplier")) {
 					const mult = parseInt(this.spawnType.split("=")[1]);
 					const hue = mult > 0 ? 240 - (mult / 32) * 120 : 0 + (Math.abs(mult) / 32) * 120;
-					material.diffuseColor = Color3.FromHSV(hue, 0.8, 0.6);
+					this.setColor(material, Color3.FromHSV(hue, 0.8, 0.6));
 				} else {
 					// Power ups, simple colors
-					if (this.spawnType === "Passive Ball") material.diffuseColor = new Color3(1, 1, 0);
-					else if (this.spawnType === "Gravity Adjust") material.diffuseColor = new Color3(0, 1, 1);
-					else if (this.spawnType === "Extra Time") material.diffuseColor = new Color3(1, 0, 1);
-					else if (this.spawnType === "Extra Ball") material.diffuseColor = new Color3(0, 1, 0);
+					if (this.spawnType === "Passive Ball") this.setColor(material, new Color3(1, 1, 0));
+					else if (this.spawnType === "Gravity Adjust") this.setColor(material, new Color3(0, 1, 1));
+					else if (this.spawnType === "Extra Time") this.setColor(material, new Color3(1, 0, 1));
+					else if (this.spawnType === "Extra Ball") this.setColor(material, new Color3(0, 1, 0));
 				}
 				break;
 		}
@@ -154,7 +166,7 @@ export class GameCube extends GameObject {
 			const force = event.impulse;
 			const points = Math.round(force * mult);
 			this.igc.state.scorePoints(points);
-			event.point && createScoreLabel(points.toString(), event.point.clone(), 1000);
+			event.point && createLabelAt(points.toString(), points < 0 ? "red" : "white", event.point.clone(), 1000);
 		} else if (this.spawnType === "Passive Ball") {
 			this.igc.spawnPassiveBall();
 			// Reset cube to inert

@@ -39,7 +39,7 @@ let guiTexture: AdvancedDynamicTexture;
 export function setGuiTexture(texture: AdvancedDynamicTexture) {
 	guiTexture = texture;
 }
-export function createScoreLabel(text: string, point: Vector3, duration: number) {
+export function createLabelAt(text: string, color: string, point: Vector3, duration: number) {
 	if(!guiTexture) return;
 	// Create the anchor at the hit point
 	const anchor = new TransformNode("forceAnchor");
@@ -50,7 +50,7 @@ export function createScoreLabel(text: string, point: Vector3, duration: number)
 	label.text = text;
 //	label.color = force > 10 ? "red" : "yellow"; // Color based on intensity
 	label.fontSize = 40;
-	label.color = "white";
+	label.color = color;
 	label.fontWeight = "bold";
 	guiTexture.addControl(label);
 
