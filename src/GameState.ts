@@ -1,22 +1,25 @@
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
-import type { UIManager } from "./UIManager";
 import type { IGameController } from "./GameController";
 
+export interface IGameStateListener {
+	gameStateEvent(type: string, state: GameState): void
+}
 export class GameState {
 	score = 0
 	timeRemaining = 30
 	round = 1
+	scoreThisRound = 0
 	forceMultiplier = 1
 	spawnPoolSize = 10
 	gravityMagnitude = 7
 	extraBalls = 2
-	gravityDirection = new Vector3(0, -0.781, -0.625)
+	gravityDirection = new Vector3(0, -0.7, -0.6)
 	lastTime = performance.now();
-	private uim: UIManager;
 	private igc: IGameController;
-	constructor(uim: UIManager, igc: IGameController) {
-		this.uim = uim;
+	private igs: IGameStateListener;
+	constructor(igc: IGameController, igs: IGameStateListener) {
 		this.igc = igc;
+		this.igs = igs;
 	}
 	get currentGravity() {
 		return new Vector3(0, this.gravityMagnitude * this.gravityDirection.y, this.gravityMagnitude * this.gravityDirection.z)
@@ -30,41 +33,49 @@ export class GameState {
 	startGame() {
 		this.lastTime = performance.now();
 		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
-		this.uim.round(this.round);
-		this.uim.timeRemaining(this.timeRemaining);
-		this.uim.score(this.score);
-		this.uim.balls(this.extraBalls);
+		this.igs.gameStateEvent("start", this);
 	}
 	isGameOver() {
 		return this.extraBalls <= 0 && this.igc.controllableBalls.filter(ball => ball.mesh.isEnabled()).length === 0;
 	}
 	nextRound() {
+		if(this.scoreThisRound === 0) {
+			this.timeRemaining = 0;
+			this.extraBalls = 0;
+			this.igc.controllableBalls.forEach(ball => ball.mesh.setEnabled(false));
+			this.igs.gameStateEvent("gameOver", this);
+			return;
+		}
 		this.round++;
-		this.uim.round(this.round);
+		this.scoreThisRound = 0;
 		this.timeRemaining = 30;
-		this.forceMultiplier *= 1.01;
+		this.forceMultiplier *= 1.05;
 		this.spawnPoolSize++;
-		this.gravityMagnitude *= 1.01;
-		this.uim.timeRemaining(this.timeRemaining);
+		this.gravityMagnitude *= 0.95;
 		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
+		this.igs.gameStateEvent("nextRound", this);
 	}
 	scorePoints(points: number) {
 		this.score += points;
-		this.uim.score(this.score);
+		this.scoreThisRound += points;
+		this.igs.gameStateEvent("scorePoints", this);
 	}
 	updateTimeRemaining(delta: number) {
 		this.timeRemaining -= delta;
-		this.uim.timeRemaining(this.timeRemaining);
 		if (this.timeRemaining <= 0) {
 			this.nextRound();
+		}
+		else {
+			this.igs.gameStateEvent("timeRemaining", this);
 		}
 	}
 	adjustGravity(amount:Vector3) {
 		this.gravityDirection.addInPlace(amount);
 		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
+		this.igs.gameStateEvent("adjustGravity", this);
 	}
 	extraTime(amount: number) {
 		this.timeRemaining += amount;
-		this.uim.timeRemaining(this.timeRemaining);
+		this.igs.gameStateEvent("extraTime", this);
 	}
 }

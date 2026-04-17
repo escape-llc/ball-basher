@@ -9,6 +9,7 @@ export class UIManager {
 	startElement: HTMLElement|null = document.getElementById("startMessage")
 	gameOverElement: HTMLElement|null = document.getElementById("gameOver");
 	versionElement: HTMLElement|null = document.getElementById("version");
+	gravityElement: HTMLElement|null = document.getElementById("gravity");
 	round(rn: number) {
 		this.roundElement && (this.roundElement.textContent = rn.toString());
 	}
@@ -23,6 +24,9 @@ export class UIManager {
 	}
 	balls(balls: number) {
 		this.ballsElement && (this.ballsElement.textContent = balls.toString());
+	}
+	gravity(gravity: Vector3) {
+		this.gravityElement && (this.gravityElement.textContent = `${gravity.x.toFixed(2)}, ${gravity.y.toFixed(2)}, ${gravity.z.toFixed(2)}`);
 	}
 	startMessage(show: boolean) {
 		this.startElement && (this.startElement.style.display = show ? "block" : "none");

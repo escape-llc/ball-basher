@@ -10,9 +10,10 @@ import {
 	Color3, Color4, FreeCamera, HemisphericLight, MeshBuilder, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, 
 	type IPhysicsCollisionEvent,
+	type Vector,
 } from "@babylonjs/core";
 import { setGuiTexture, UIManager } from "./UIManager";
-import { GameState } from "./GameState";
+import { GameState, type IGameStateListener } from "./GameState";
 import { GameObject, ControllableBall, GameCube, PassiveBall } from "./GameObjects";
 import type { IGameController } from "./GameController";
 declare const __VANILLA_VERSION__: string;
@@ -23,7 +24,8 @@ const uim = new UIManager();
 
 uim.version(__VANILLA_VERSION__);
 
-class GameController implements IGameController {
+class GameController implements IGameController, IGameStateListener {
+	force_multiplier: number = 2
 	scene: Scene
 	state: GameState
 	gameObjects: Map<string, GameObject> = new Map()
@@ -44,15 +46,52 @@ class GameController implements IGameController {
 	private camera: FreeCamera
 	private light: HemisphericLight
 	private uim: UIManager
+	private floorColor: Color3 = Color3.FromHSV(20, 0.75, 0.6);
+	private floorMaterial: StandardMaterial|null = null;
 	constructor(scene: Scene, havok: HavokPlugin, uim: UIManager) {
 		this.scene = scene;
-		this.state = new GameState(uim, this);
+		this.state = new GameState(this, this);
 		this.havok = havok;
 		const camera = this.createCamera(scene);
 		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene);
 		this.camera = camera;
 		this.light = light;
 		this.uim = uim;
+	}
+	gameStateEvent(type: string, state: GameState): void {
+		switch(type) {
+			case "start":
+				this.uim.round(state.round);
+				this.uim.timeRemaining(state.timeRemaining);
+				this.uim.score(state.score);
+				this.uim.balls(state.extraBalls);
+				this.uim.gravity(state.currentGravity);
+				break;
+			case "gameOver":
+				this.uim.timeRemaining(state.timeRemaining);
+				this.uim.balls(state.extraBalls);
+				this.uim.gravity(state.currentGravity);
+				break;
+			case "nextRound":
+				this.uim.round(state.round);
+				this.uim.timeRemaining(state.timeRemaining);
+				this.uim.gravity(state.currentGravity);
+				this.floorColor = Color3.FromHSV((state.round * 18) % 360, 0.75, 0.6);
+				if(this.floorMaterial) this.floorMaterial.diffuseColor = this.floorColor;
+				break;
+			case "scorePoints":
+				this.uim.score(state.score);
+				break;
+			case "adjustGravity":
+				this.uim.gravity(state.currentGravity);
+				break;
+			case "extraTime":
+				this.uim.timeRemaining(state.timeRemaining);
+				break;
+			case "timeRemaining":
+				this.uim.timeRemaining(state.timeRemaining);
+				break;
+		}
 	}
 	private createCamera(scene: Scene) {
 		// Camera
@@ -67,7 +106,7 @@ class GameController implements IGameController {
 		this.uim.startMessage(false);
 		this.uim.gameOver(false);
 		if(!this.scene) return;
-		this.state = new GameState(this.uim, this);
+		this.state = new GameState(this, this);
 		this.state.startGame();
 		this.controllableBalls.forEach(ball => ball.respawn());
 		this.cubes.forEach(cube => {
@@ -75,6 +114,8 @@ class GameController implements IGameController {
 			cube.spawnTimer = Math.random() * 2;
 			cube.updateAppearance();
 		});
+		this.floorColor = Color3.FromHSV((this.state.round * 18) % 360, 0.75, 0.6);
+		this.floorMaterial && (this.floorMaterial.diffuseColor = this.floorColor);
 	}
 	pauseGame(): void {
 		throw new Error("Method not implemented.");
@@ -116,7 +157,7 @@ class GameController implements IGameController {
 			go.collisionAction(event);
 	}
 	applyForce(force: Vector3): void {
-		const fx = force.scale(this.state.forceMultiplier * 2);
+		const fx = force.scale(this.state.forceMultiplier * this.force_multiplier);
 		this.controllableBalls.forEach(ball => { ball.applyImpulse(fx); });
 	}
 	adjustGravity(): void {
@@ -138,9 +179,9 @@ class GameController implements IGameController {
 		// Floor
 		const floor = MeshBuilder.CreateGround("floor", { width: 20, height: 10 }, this.scene);
 		floor.position.y = 0;
-		const floorMaterial = new StandardMaterial("floorMat", this.scene);
-		floorMaterial.diffuseColor = new Color3(0.95, 0.65, 0.5);
-		floor.material = floorMaterial;
+		this.floorMaterial = new StandardMaterial("floorMat", this.scene);
+		this.floorMaterial.diffuseColor = this.floorColor;
+		floor.material = this.floorMaterial;
 		const floorProps = {
 			mass: 0,
 			restitution: 0.1,
@@ -209,10 +250,10 @@ class GameController implements IGameController {
 	private createControllableBalls(): void {
 		const hue = [10, 180, 280];
 		const diameters = [0.9, 0.7, 0.5];
-		const masses = [14, 9, 7];
+		const masses = [13, 9, 7];
 		const restitution = [0.3, 0.6, 0.3];
-		const friction = [0.2, 0.3, 0.4];
-		const linearDamping = [0.2, 0.3, 0.5];
+		const friction = [0.1, 0.3, 0.4];
+		const linearDamping = [0.1, 0.3, 0.5];
 		for (let ix = 0; ix < 3; ix++) {
 			const name = "ball" + ix
 			const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, this.scene);
@@ -287,8 +328,6 @@ class GameController implements IGameController {
 		const havokPlugin = new HavokPlugin(true, havok);
 		const scene = GameController.createScene(havokPlugin);
 		setGuiTexture(AdvancedDynamicTexture.CreateFullscreenUI("UI"));
-//		const camera = createCamera(scene);
-//		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene);
 		const gc = new GameController(scene, havokPlugin, uim);
 		await gc.createGameObjects();
 		return gc;
