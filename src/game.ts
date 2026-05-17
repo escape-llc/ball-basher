@@ -7,7 +7,7 @@ import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import HavokPhysics from "@babylonjs/havok";
 import  { AdvancedDynamicTexture } from "@babylonjs/gui";
 import {
-	Color3, Color4, FreeCamera, HemisphericLight, Material, Mesh, MeshBuilder, NodeMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
+	Color3, Color4, FreeCamera, HemisphericLight, Material, MeshBuilder, NodeMaterial, PBRMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, 
 	type IPhysicsCollisionEvent,
 } from "@babylonjs/core";
@@ -15,7 +15,8 @@ import { setGuiTexture, UIManager } from "./UIManager";
 import { GameState, type IGameStateListener } from "./GameState";
 import { GameObject, ControllableBall, GameCube, PassiveBall } from "./GameObjects";
 import type { IGameController } from "./GameController";
-import cubeMaterial from "./assets/cubeMaterial.json";
+import cubeMaterial from "./assets/crossFadeMaterial.json";
+import { SpawnController } from "./SpawnController";
 
 declare const __VANILLA_VERSION__: string;
 
@@ -33,32 +34,29 @@ class GameController implements IGameController, IGameStateListener {
 	controllableBalls: ControllableBall[] = []
 	passiveBalls: PassiveBall[] = []
 	cubes: GameCube[] = []
-	spawnSequence: string[] = [
-		"Multiplier=1", "Multiplier=2", "Hole", "Multiplier=4", "Multiplier=-1",
-		"Multiplier=8", "Multiplier=-2", "Hole", "Multiplier=16", "Multiplier=-4",
-		"Multiplier=32", "Multiplier=-8", "Hole", "Multiplier=-16", "Multiplier=-32",
-		"Passive Ball", "Gravity Adjust", "Hole", "Extra Time", "Passive Ball", "Extra Ball",
-		"Hole", "Multiplier=16", "Gravity Adjust", "Multiplier=-16", "Extra Time",
-		"Hole", "Multiplier=32", "Gravity Adjust", "Multiplier=-32", "Extra Time"
-	]
 	gameStarted = false
 	gameOver = false
 	private havok: HavokPlugin
 	private camera: FreeCamera
 	private light: HemisphericLight
 	private uim: UIManager
-	private floorColor: Color3 = Color3.FromHSV(20, 0.75, 0.6);
-	private floorMaterial: StandardMaterial|null = null;
-	private cubeMaterial: NodeMaterial|null = null;
+	private floorColor: Color3 = Color3.FromHSV(20, 0.75, 0.6)
+	private floorMaterial: StandardMaterial|null = null
+	private cubeMaterial: NodeMaterial|null = null
+	private spawner: SpawnController
 	constructor(scene: Scene, havok: HavokPlugin, uim: UIManager) {
-		this.scene = scene;
-		this.state = new GameState(this, this);
-		this.havok = havok;
-		const camera = this.createCamera(scene);
-		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene);
-		this.camera = camera;
-		this.light = light;
-		this.uim = uim;
+		this.scene = scene
+		this.state = new GameState(this, this)
+		this.havok = havok
+		const camera = this.createCamera(scene)
+		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene)
+		this.camera = camera
+		this.light = light
+		this.uim = uim
+		this.spawner = new SpawnController(this)
+	}
+	get activeBalls(): number {
+		return this.controllableBalls.filter(ball => ball.mesh.isEnabled()).length
 	}
 	gameStateEvent(type: string, state: GameState): void {
 		switch(type) {
@@ -68,16 +66,19 @@ class GameController implements IGameController, IGameStateListener {
 				this.uim.score(state.score);
 				this.uim.balls(state.extraBalls);
 				this.uim.gravity(state.currentGravity);
+				this.scene.getPhysicsEngine()?.setGravity(state.currentGravity);
 				break;
 			case "gameOver":
 				this.uim.timeRemaining(state.timeRemaining);
 				this.uim.balls(state.extraBalls);
 				this.uim.gravity(state.currentGravity);
+				this.controllableBalls.forEach(ball => ball.mesh.setEnabled(false));
 				break;
 			case "nextRound":
 				this.uim.round(state.round);
 				this.uim.timeRemaining(state.timeRemaining);
 				this.uim.gravity(state.currentGravity);
+				this.scene.getPhysicsEngine()?.setGravity(state.currentGravity);
 				this.floorColor = Color3.FromHSV((state.round * 18) % 360, 0.75, 0.6);
 				if(this.floorMaterial) this.floorMaterial.diffuseColor = this.floorColor;
 				break;
@@ -86,6 +87,7 @@ class GameController implements IGameController, IGameStateListener {
 				break;
 			case "adjustGravity":
 				this.uim.gravity(state.currentGravity);
+				this.scene.getPhysicsEngine()?.setGravity(state.currentGravity);
 				break;
 			case "extraTime":
 				this.uim.timeRemaining(state.timeRemaining);
@@ -111,11 +113,9 @@ class GameController implements IGameController, IGameStateListener {
 		this.state = new GameState(this, this);
 		this.state.startGame();
 		this.controllableBalls.forEach(ball => ball.respawn());
-		this.cubes.forEach(cube => {
-			cube.spawnType = "Inert";
-			cube.spawnTimer = Math.random() * 2;
-			cube.updateAppearance();
-		});
+		this.passiveBalls.forEach(ball => ball.dispose())
+		this.passiveBalls = []
+		this.spawner.start()
 		this.floorColor = Color3.FromHSV((this.state.round * 18) % 360, 0.75, 0.6);
 		this.floorMaterial && (this.floorMaterial.diffuseColor = this.floorColor);
 	}
@@ -144,19 +144,17 @@ class GameController implements IGameController, IGameStateListener {
 		this.passiveBalls.push(new PassiveBall("passiveBall", ball, body, this));
 	}
 	private commonCollisionAction(event: IPhysicsCollisionEvent): void {
-			if(event.type !== "COLLISION_STARTED") return;
-			const hitBody = event.collidedAgainst;
+			if(event.type !== "COLLISION_STARTED") return
+			const hitBody = event.collidedAgainst
 			// Access the Mesh (TransformNode) linked to that body
-			const hitMesh = hitBody.transformNode;
-			if(hitMesh.name === "floor" || hitMesh.name === "base") return;
+			const hitMesh = hitBody.transformNode
+			if(hitMesh.name === "floor" || hitMesh.name === "base") return
 			// look up object
-			const obj:GameObject|undefined = this.gameObjects.get(hitMesh.name);
-			if (!obj) return;
-			if(!("collisionAction" in obj)) return;
-			const go = obj as GameCube;
-			//const spawnType = go.spawnType;
-			//console.log("hit: " + hitMesh.name, spawnType);
-			go.collisionAction(event);
+			const obj:GameObject|undefined = this.gameObjects.get(hitMesh.name)
+			//console.log("hit: " + hitMesh.name, obj)
+			if (!obj) return
+			const go = obj as GameCube
+			this.spawner.collision(go, event)
 	}
 	applyForce(force: Vector3): void {
 		const fx = force.scale(this.state.forceMultiplier * this.force_multiplier);
@@ -206,8 +204,6 @@ class GameController implements IGameController, IGameStateListener {
 	private createCubeMaterial(name: string, neutral: Color3): Material {
 		if(this.cubeMaterial) {
 			const  mx: NodeMaterial = this.cubeMaterial.clone(name + "-Mat");
-			const colorBlock = mx.getBlockByName("BaseColor");
-			colorBlock && (colorBlock.value = neutral); // Change to red
 			return mx;
 		}
 		else {
@@ -228,7 +224,7 @@ class GameController implements IGameController, IGameStateListener {
 			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
-			const go = new GameCube(name, cube, cubeBody, this, "Inert", Math.random()*2, false);
+			const go = new GameCube(name, cube, cubeBody, this);
 			this.gameObjects.set(name, go)
 			this.cubes.push(go);
 		}
@@ -241,7 +237,7 @@ class GameController implements IGameController, IGameStateListener {
 			const cubeBody = new PhysicsAggregate(cube, PhysicsShapeType.BOX, cubeProps, this.scene);
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			cubeBody.body.disablePreStep = false;
-			const go = new GameCube(name, cube, cubeBody, this, "Inert", Math.random()*2, false);
+			const go = new GameCube(name, cube, cubeBody, this);
 			this.gameObjects.set(name, go);
 			this.cubes.push(go);
 		}
@@ -255,7 +251,7 @@ class GameController implements IGameController, IGameStateListener {
 			cubeBody.body.setMotionType(PhysicsMotionType.ANIMATED);
 			// TODO only enable this while animating
 			cubeBody.body.disablePreStep = false;
-			const go = new GameCube(name, cube, cubeBody, this, "Inert", Math.random()*2, false);
+			const go = new GameCube(name, cube, cubeBody, this);
 			this.gameObjects.set(name, go);
 			this.cubes.push(go);
 		}
@@ -272,9 +268,10 @@ class GameController implements IGameController, IGameStateListener {
 			const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, this.scene);
 			const spawn = new Vector3(ix, 2, 0);
 			ball.position.set(ix, 2, 0);
-			const material = new StandardMaterial("Mat-" + name, this.scene);
-			material.diffuseColor = Color3.FromHSV(hue[ix], 0.7, 0.6);
-	//		material.emissiveColor = new Color3(0.3, 0.3, 0.3);
+			const material = new PBRMaterial("Mat-" + name, this.scene);
+			material.metallic = 0.6;
+			material.roughness = 0.2;
+			material.albedoColor = Color3.FromHSV(hue[ix], 0.7, 0.6);
 			ball.material = material;
 			const ballProps = {
 				mass: masses[ix], restitution: restitution[ix], linearDamping: linearDamping[ix], angularDamping: 0.2, friction: friction[ix]
@@ -298,7 +295,8 @@ class GameController implements IGameController, IGameStateListener {
 		}
 		const deltaTime = this.state.getDeltaTime() ?? 0;
 		applyForce();
-		this.cubes.forEach(cube => cube.update(deltaTime));
+//		this.cubes.forEach(cube => cube.update(deltaTime));
+		this.spawner.update(deltaTime)
 		this.state.updateTimeRemaining(deltaTime);
 
 		// Check if balls are out
@@ -341,6 +339,7 @@ class GameController implements IGameController, IGameStateListener {
 		const havokPlugin = new HavokPlugin(true, havok);
 		const scene = GameController.createScene(havokPlugin);
 		setGuiTexture(AdvancedDynamicTexture.CreateFullscreenUI("UI"));
+		scene.createDefaultEnvironment({ createSkybox: false, createGround: false });
 		const gc = new GameController(scene, havokPlugin, uim);
 		await gc.createGameObjects();
 		return gc;

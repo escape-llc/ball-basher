@@ -51,6 +51,8 @@ export function createLabelAt(text: string, color: string, point: Vector3, durat
 //	label.color = force > 10 ? "red" : "yellow"; // Color based on intensity
 	label.fontSize = 40;
 	label.color = color;
+	label.outlineColor = "blue";
+	label.outlineWidth = 2;
 	label.fontWeight = "bold";
 	guiTexture.addControl(label);
 

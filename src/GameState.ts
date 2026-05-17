@@ -32,17 +32,15 @@ export class GameState {
 	}
 	startGame() {
 		this.lastTime = performance.now();
-		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
 		this.igs.gameStateEvent("start", this);
 	}
 	isGameOver() {
-		return this.extraBalls <= 0 && this.igc.controllableBalls.filter(ball => ball.mesh.isEnabled()).length === 0;
+		return this.extraBalls <= 0 && this.igc.activeBalls === 0;
 	}
 	nextRound() {
 		if(this.scoreThisRound <= 0) {
 			this.timeRemaining = 0;
 			this.extraBalls = 0;
-			this.igc.controllableBalls.forEach(ball => ball.mesh.setEnabled(false));
 			this.igs.gameStateEvent("gameOver", this);
 			return;
 		}
@@ -53,7 +51,6 @@ export class GameState {
 		this.spawnPoolSize++;
 		this.gravityMagnitude *= 0.95;
 		this.gravityDirection.x += Math.random()*0.2 - 0.1;
-		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
 		this.igs.gameStateEvent("nextRound", this);
 	}
 	scorePoints(points: number) {
@@ -72,7 +69,6 @@ export class GameState {
 	}
 	adjustGravity(amount:Vector3) {
 		this.gravityDirection.addInPlace(amount);
-		this.igc.scene.getPhysicsEngine()?.setGravity(this.currentGravity);
 		this.igs.gameStateEvent("adjustGravity", this);
 	}
 	extraTime(amount: number) {
