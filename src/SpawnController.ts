@@ -1,4 +1,4 @@
-import { Color3, InputBlock, NodeMaterial, Scene, Texture, Animation, TextureBlock, type IPhysicsCollisionEvent } from "@babylonjs/core";
+import { Color3, InputBlock, NodeMaterial, Scene, Texture, Animation, TextureBlock, type IPhysicsCollisionEvent, Material } from "@babylonjs/core";
 import type { IGameController } from "./GameController";
 import { animateHole, type GameObject } from "./GameObjects";
 import tex_1x from "./assets/tex_1x.png";
@@ -71,11 +71,11 @@ class MultiplierFactory extends SpawnFactoryBase implements ISpawnActionFactory 
 	}
 }
 class HoleFactory extends SpawnFactoryBase implements ISpawnActionFactory {
-	constructor(dm: number, dr: number, color: Color3) {
-		super("Hole", dm, dr, color, null)
+	constructor(dm: number, dr: number, color: Color3, tex: Texture) {
+		super("Hole", dm, dr, color, tex)
 	}
 	create(go: GameObject): ISpawnAction {
-		return new Spawn_Hole(this.spawnType, this.makeDuration(), go, this.color)
+		return new Spawn_Hole(this.spawnType, this.makeDuration(), go, this.color, this.tex as Texture)
 	}
 }
 class PassiveBallFactory extends SpawnFactoryBase implements ISpawnActionFactory {
@@ -154,8 +154,8 @@ class Spawn_Inert extends SpawnWithColorAndTexture {
 	collision(event: IPhysicsCollisionEvent, igc: IGameController): void { }
 }
 class Spawn_Hole extends SpawnWithColorAndTexture {
-	constructor(nm: string, dur: number, go: GameObject, col: Color3) {
-		super(nm, dur, go, col, null)
+	constructor(nm: string, dur: number, go: GameObject, col: Color3, tex: Texture) {
+		super(nm, dur, go, col, tex)
 	}
 	/**
 	 * Do not accept updates; wait for the animation complete callback.
@@ -266,7 +266,7 @@ function spawnTexture(scene: Scene, tx: any): Texture {
 	return tex
 }
 function createSpawnSequence(scene: Scene): ISpawnActionFactory[] {
-	const hole = new HoleFactory(5, 5, new Color3(0.25, 0.25, 0.25))
+	const hole = new HoleFactory(5, 5, new Color3(0.25, 0.25, 0.25), spawnTexture(scene, tex_inert))
 	const passive = new PassiveBallFactory(2, 5, new Color3(1, 1, 0), spawnTexture(scene, tex_et))
 	const gravity = new GravityAdjustFactory(2, 5, new Color3(0, 1, 1), spawnTexture(scene, tex_gravity))
 	const xtime = new ExtraTimeFactory(2, 5, new Color3(1, 0, 1), spawnTexture(scene, tex_et))
@@ -379,12 +379,15 @@ export class SpawnController {
 			nextBaseColor.value = newspawn.color
 			nextTopTexture.texture = newspawn.texture
 			xfade.value = 0.0
+			// This tells the shader to drop its texture sampler cache and immediately bind the new assets
+			mat.markAsDirty(Material.TextureDirtyFlag | Material.MiscDirtyFlag);
 			const xfadeAnim = new Animation("crossFade", "value", 30, Animation.ANIMATIONTYPE_FLOAT)
 			const keys = [
 				{ frame: 0, value: 0 },
 				{ frame: 30, value: 1 }
 			];
 			xfadeAnim.setKeys(keys);
+			// 1. Start forcing the GPU updates immediately before each frame renders
 //			console.log("cross-fade start", newspawn.name, newspawn.object.name)
 			this.igc.scene.beginDirectAnimation(xfade, [xfadeAnim], 0, 30, false, 1, () => {
 //				console.log("cross-fade complete", newspawn.name, newspawn.object.name)

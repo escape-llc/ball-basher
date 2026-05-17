@@ -7,8 +7,9 @@ import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import HavokPhysics from "@babylonjs/havok";
 import  { AdvancedDynamicTexture } from "@babylonjs/gui";
 import {
-	Color3, Color4, FreeCamera, HemisphericLight, Material, MeshBuilder, NodeMaterial, PBRMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
+	Color3, Color4, CubeTexture, FreeCamera, HemisphericLight, Material, MeshBuilder, NodeMaterial, PBRMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, 
+	Texture, 
 	type IPhysicsCollisionEvent,
 } from "@babylonjs/core";
 import { setGuiTexture, UIManager } from "./UIManager";
@@ -17,6 +18,9 @@ import { GameObject, ControllableBall, GameCube, PassiveBall } from "./GameObjec
 import type { IGameController } from "./GameController";
 import cubeMaterial from "./assets/crossFadeMaterial.json";
 import { SpawnController } from "./SpawnController";
+import tex_albedo from "./assets/albedo.png";
+import tex_bump from "./assets/distortion.png";
+import tex_studio from "./assets/studio.env?raw";
 
 declare const __VANILLA_VERSION__: string;
 
@@ -178,13 +182,58 @@ class GameController implements IGameController, IGameStateListener {
 		this.createCubes();
 		this.createControllableBalls();
 	}
+	private pbrGroundMaterial(scene: Scene): PBRMaterial|null {
+		// 1. Ensure you have ambient light environment setup (PBR relies on this!)
+		if (!scene.environmentTexture) {
+				scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
+						tex_studio, 
+						scene
+				);
+		}
+
+		// 2. Create the Ground PBR Material
+		const groundMat = new PBRMaterial("groundMaterial", scene);
+
+		// 3. Set the Core PBR Surface Properties
+		groundMat.albedoColor = new Color3(0.6, 0.5, 0.4);  // Soft, natural earthy base tone
+		groundMat.metallic = 0.0;                           // 0.0 = Natural/organic ground (Non-metallic)
+		groundMat.roughness = 0.85;                         // 0.85 = Very rough, diffuses light nicely (soil/dirt)
+
+		// 4. (Optional) Simulate Puddles or Wet/Slick spots
+		groundMat.clearCoat.isEnabled = false;
+		groundMat.clearCoat.intensity = 0.3;                // Blends a thin, shiny layer on top
+		groundMat.clearCoat.roughness = 0.1;                // Makes the wet layer highly reflective
+
+		// 6. Invert the Normal Map green channel if shading looks upside down
+		groundMat.invertNormalMapX = false;
+		groundMat.invertNormalMapY = true; 
+
+		// 7. Scale / Tile the textures so they look detailed over a large mesh
+		// 1. Create the texture instances directly
+		const albedoTex = new Texture(tex_albedo, scene);
+		const bumpTex = new Texture(tex_bump, scene);
+		// 2. Tile them here (TypeScript fully recognizes uScale/vScale on the Texture class)
+		const tileAmount = 1.0;
+		albedoTex.uScale = tileAmount;
+		albedoTex.vScale = tileAmount;
+		bumpTex.uScale = tileAmount;
+		bumpTex.vScale = tileAmount;
+
+		// 3. Assign them to your PBR material slots
+		groundMat.albedoTexture = albedoTex;
+		groundMat.bumpTexture = bumpTex;
+//groundMat.useMicroSurfaceFromReflectivityMapAlpha = false;
+		// 8. Assign to your ground mesh
+		return groundMat;
+	}
 	private createPlayArea(): void {
 		// Floor
 		const floor = MeshBuilder.CreateGround("floor", { width: 20, height: 10 }, this.scene);
 		floor.position.y = 0;
 		this.floorMaterial = new StandardMaterial("floorMat", this.scene);
 		this.floorMaterial.diffuseColor = this.floorColor;
-		floor.material = this.floorMaterial;
+//		floor.material = this.floorMaterial;
+		floor.material = this.pbrGroundMaterial(this.scene) ?? this.floorMaterial;
 		const floorProps = {
 			mass: 0,
 			restitution: 0.1,
