@@ -38,10 +38,23 @@
 			top: .25rem;
 			left: .5rem;
 			color: white;
-			width: 100%;
+			width: calc(100% - 1rem);
 			display: flex;
 			flex-direction: row;
 			gap: 1.5rem;
+		}
+		#leaderboard {
+			position: absolute;
+			left: .5rem;
+			top: calc(100% - 20rem);
+			height: calc(20rem - 0.5rem);
+			width: calc(100% - 1rem);
+			margin:0;
+/*			background: rgba(0, 0, 0, 0.6);
+			border: 2px solid rgba(128, 128, 128, 0.6);
+			border-radius: 10px;
+*/
+			text-align: center;
 		}
 
 		.pill {
@@ -68,6 +81,68 @@
 			margin-right: 3rem;
 		}
 	</style>
+	<style>
+		.interactive { pointer-events: auto; }
+
+		/* Unified Control Management UI Panel */
+		.game-panel {
+				border: 2px solid rgba(128, 128, 128, 0.8);
+				border-radius: 8px;
+				max-width: 420px;
+				max-height: calc(100% - 1rem);
+				padding: 8px;
+				box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+				color: #f3f4f6;
+		}
+
+		.panel-header { display: flex; justify-content: space-between; align-items: center; }
+		.panel-title { margin: 0; font-size: 20px; font-weight: bold; color: white; text-transform: uppercase; }
+		
+		.close-icon-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
+		.close-icon-btn:hover { color: #f87171; }
+
+		/* Sub-sections elements tracking options layout styling definitions */
+		.auth-block, .game-block {
+			background: #1e293b66;
+			padding: 8px;
+			border-radius: 8px;
+			margin-bottom: 8px;
+			text-align: center;
+		}
+		
+		.google-auth-btn {
+				background: #ffffff; color: #1f2937; border: none; padding: 10px 16px;
+				font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer;
+				display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+		}
+		.google-auth-btn:hover { background: #f3f4f6; }
+
+		.action-button {
+				background: #3b82f6; color: white; border: none; padding: 8px 14px;
+				border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px;
+		}
+		.action-button.danger { background: #ef4444; }
+		.action-button:hover { opacity: 0.9; }
+
+		/* Leaderboard output structured list element definitions */
+		.rank-container { max-height: 200px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
+		.rank-table {
+			width: 100%;
+			border-collapse: collapse;
+			text-align: left;
+			font-size: 14px;
+			background: #1e293b66;
+		}
+		.rank-table th { background: #0f172a; color: #94a3b8; padding: 8px; font-size: 11px; text-transform: uppercase; }
+		.rank-table td { padding: 10px 8px; border-bottom: 1px solid #334155; }
+		
+		.rank-cell { color: #fbbf24; font-weight: bold; width: 15%; }
+		.name-cell { color: #e2e8f0; width: 60%; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.score-cell { color: #34d399; font-weight: bold; text-align: right; width: 25%; }
+
+		.center-text { text-align: center; color: white; padding: 12px; }
+		.error-text { color: #f87171; }
+	</style>
 </head>
 
 <body>
@@ -83,6 +158,46 @@
 			<div class="pill"><span class="label" style="margin-right:0.2rem">g</span><span class="value" id="gravity">-</span></div>
 			<div class="pill"><span class="label">Round </span><span class="value" id="round" style="width:3rem">1</span></div>
 			<div class="pill"><span class="label">Time </span><span class="value" id="time" style="width:3rem;max-width:3rem">30</span></div>
+		</div>
+	</div>
+	<div id="leaderboard">
+		<div id="gamePanel" class="game-panel interactive">
+			<div class="panel-header">
+					<h3 class="panel-title">Game Hub</h3>
+					<button id="closePanelBtn" class="close-icon-btn" onclick="document.getElementById('gamePanel').style.display='none'">&times;</button>
+			</div>
+
+			<!-- Authentic State Display Segment Container Section -->
+			<div id="authSection" class="auth-block">
+					<p style="margin-top:0; font-size:14px; color:white;">Sign in to sync high-scores</p>
+					<button id="googleLoginBtn" class="google-auth-btn">
+							<!-- Base Inline Vector Google Icon Graph Vector G Symbol -->
+							<svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.49h4.84c-.21 1.12-.84 2.07-1.79 2.7v2.25h2.91c1.7-1.56 2.68-3.86 2.68-6.6z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.2l-2.91-2.25c-.8.54-1.83.86-3.05.86-2.34 0-4.32-1.58-5.03-3.71H.95v2.32C2.43 15.98 5.46 18 9 18z"/><path fill="#FBBC05" d="M3.97 10.7c-.18-.54-.28-1.11-.28-1.7s.1-1.16.28-1.7V4.98H.95A8.99 8.99 0 0 0 0 9c0 1.45.35 2.82.95 4.02l3.02-2.32z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35L15 2.1C13.46.68 11.42 0 9 0 5.46 0 2.43 2.02.95 4.98l3.02 2.32C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+							Continue with Google
+					</button>
+			</div>
+
+			<!-- Logged-In Gameplay Interface Frame Block Segment -->
+			<div id="gameSection" class="game-block" style="display: none;">
+					<div style="font-size: 13px; color: #a7f3d0; margin-bottom: 10px; word-break: break-all;" id="statusText">Profile: Active</div>
+					<button id="logoutBtn" class="action-button danger" style="padding:4px 8px; font-size:11px;">Disconnect Profile</button>
+			</div>
+
+			<!-- Global Leader Rankings Panel Table Segment -->
+			<div class="rank-container">
+					<table class="rank-table">
+							<thead>
+									<tr>
+											<th>Pos</th>
+											<th>Player</th>
+											<th style="text-align: right; padding-right:8px;">Score</th>
+									</tr>
+							</thead>
+							<tbody id="leaderboardData">
+									<!-- Instantiated matching rows will print automatically -->
+							</tbody>
+					</table>
+			</div>
 		</div>
 	</div>
 	<div id="startMessage">Press SPACE to Start</div>

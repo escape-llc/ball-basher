@@ -21,12 +21,14 @@ import { SpawnController } from "./SpawnController";
 import tex_albedo from "./assets/albedo.png";
 import tex_bump from "./assets/distortion.png";
 import tex_studio from "./assets/studio.env?raw";
+import { GamePanel } from "./Leaderboard";
 
 declare const __VANILLA_VERSION__: string;
 
 const canvas: HTMLElement|null = document.getElementById("renderCanvas");
 const engine = new Engine(canvas as HTMLCanvasElement, true);
 const uim = new UIManager();
+const gamePanel = new GamePanel();
 
 uim.version(__VANILLA_VERSION__);
 
@@ -183,7 +185,7 @@ class GameController implements IGameController, IGameStateListener {
 		this.createControllableBalls();
 	}
 	private pbrGroundMaterial(scene: Scene): PBRMaterial|null {
-		// 1. Ensure you have ambient light environment setup (PBR relies on this!)
+		// Ensure you have ambient light environment setup (PBR relies on this!)
 		if (!scene.environmentTexture) {
 				scene.environmentTexture = CubeTexture.CreateFromPrefilteredData(
 						tex_studio, 
@@ -191,39 +193,37 @@ class GameController implements IGameController, IGameStateListener {
 				);
 		}
 
-		// 2. Create the Ground PBR Material
+		// Create the Ground PBR Material
 		const groundMat = new PBRMaterial("groundMaterial", scene);
 
-		// 3. Set the Core PBR Surface Properties
+		// Set the Core PBR Surface Properties
 		groundMat.albedoColor = new Color3(0.6, 0.5, 0.4);  // Soft, natural earthy base tone
 		groundMat.metallic = 0.0;                           // 0.0 = Natural/organic ground (Non-metallic)
 		groundMat.roughness = 0.85;                         // 0.85 = Very rough, diffuses light nicely (soil/dirt)
 
-		// 4. (Optional) Simulate Puddles or Wet/Slick spots
-		groundMat.clearCoat.isEnabled = false;
+		// (Optional) Simulate Puddles or Wet/Slick spots
+		groundMat.clearCoat.isEnabled = true;
 		groundMat.clearCoat.intensity = 0.3;                // Blends a thin, shiny layer on top
 		groundMat.clearCoat.roughness = 0.1;                // Makes the wet layer highly reflective
 
-		// 6. Invert the Normal Map green channel if shading looks upside down
+		// Invert the Normal Map green channel if shading looks upside down
 		groundMat.invertNormalMapX = false;
 		groundMat.invertNormalMapY = true; 
 
-		// 7. Scale / Tile the textures so they look detailed over a large mesh
-		// 1. Create the texture instances directly
+		// Scale / Tile the textures so they look detailed over a large mesh
+		// Create the texture instances directly
 		const albedoTex = new Texture(tex_albedo, scene);
 		const bumpTex = new Texture(tex_bump, scene);
-		// 2. Tile them here (TypeScript fully recognizes uScale/vScale on the Texture class)
+		// Tile them here (TypeScript fully recognizes uScale/vScale on the Texture class)
 		const tileAmount = 1.0;
 		albedoTex.uScale = tileAmount;
 		albedoTex.vScale = tileAmount;
 		bumpTex.uScale = tileAmount;
 		bumpTex.vScale = tileAmount;
 
-		// 3. Assign them to your PBR material slots
+		// Assign them to your PBR material slots
 		groundMat.albedoTexture = albedoTex;
 		groundMat.bumpTexture = bumpTex;
-//groundMat.useMicroSurfaceFromReflectivityMapAlpha = false;
-		// 8. Assign to your ground mesh
 		return groundMat;
 	}
 	private createPlayArea(): void {
@@ -244,9 +244,10 @@ class GameController implements IGameController, IGameStateListener {
 		// Base
 		const base = MeshBuilder.CreateBox("base", { width: 22, height: 1, depth: 1 }, this.scene);
 		base.position.set(0, 0.5, -5.5);
-		const baseMaterial = new StandardMaterial("baseMat", this.scene);
-		baseMaterial.diffuseColor = new Color3(0, 1, 0.5);
-		base.material = baseMaterial;
+//		const baseMaterial = new StandardMaterial("baseMat", this.scene);
+//		baseMaterial.diffuseColor = new Color3(0, 1, 0.5);
+//		base.material = baseMaterial;
+		base.material = floor.material;
 		const baseProps = { mass: 0, restitution: 0.9 };
 		const baseAggregate = new PhysicsAggregate(base, PhysicsShapeType.BOX, baseProps, this.scene);
 	}
@@ -372,6 +373,13 @@ class GameController implements IGameController, IGameStateListener {
 		if(this.state.isGameOver()) {
 			this.gameOver = true;
 			this.uim.gameOver(true);
+			gamePanel.submitScore(this.state.score)
+			.then(() => {
+				console.log("Score submitted successfully.");
+			})
+			.catch(err => {
+				console.error("Error submitting score:", err);
+			});
 		}
 	}
 	private static createScene(physicsPlugin: HavokPlugin) {
@@ -422,6 +430,7 @@ window.addEventListener("resize", () => {
 })
 
 game.startGameLoop();
+gamePanel.refreshLeaderboard();
 
 // Apply force to controllable balls
 function applyForce() {
