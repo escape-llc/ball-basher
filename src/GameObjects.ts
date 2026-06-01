@@ -67,13 +67,30 @@ export class GameObject {
 		this.mesh.setEnabled(enabled);
 	}
 }
-export class ControllableBall extends GameObject {
+export class BallCommon extends GameObject {
 	spawnPosition: Vector3 = new Vector3(0, 2, 0);
+	worldRadius: number
+	isGlowing: boolean = false
 	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, igc: IGameController) {
 		super(name, mesh, body, igc);
+    const boundInfo = mesh.getBoundingInfo();
+    const localRadius = (boundInfo.maximum.y - boundInfo.minimum.y) / 2;
+    this.worldRadius = localRadius * mesh.scaling.y;
+		//console.log(`world radius ${name}: ${this.worldRadius}`);
 	}
 	applyImpulse(forceVector: Vector3) {
 		this.body.body.applyImpulse(forceVector, this.mesh.getAbsolutePosition());
+	}
+	isTouchingFloor(): boolean {
+		const currentY = this.mesh.getAbsolutePosition().y;
+		const deltaY = Math.abs(currentY - this.worldRadius);
+		//console.log(`${this.name} deltaY: ${deltaY} center: ${currentY} radius: ${this.worldRadius}`);
+		return deltaY <= 0.15; // floor is at y=0
+	}
+}
+export class ControllableBall extends BallCommon {
+	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, igc: IGameController) {
+		super(name, mesh, body, igc);
 	}
 	respawn() {
 		this.setEnabled(false);
@@ -84,8 +101,7 @@ export class ControllableBall extends GameObject {
 		this.body.body.disablePreStep = false;
 	}
 }
-export class PassiveBall extends GameObject {
-	spawnPosition: Vector3 = new Vector3(0, 2, 0);
+export class PassiveBall extends BallCommon {
 	constructor(name: string, mesh: Mesh, body: PhysicsAggregate, igc: IGameController) {
 		super(name, mesh, body, igc);
 	}

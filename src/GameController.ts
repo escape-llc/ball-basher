@@ -1,6 +1,6 @@
 import { GameState } from "./GameState";
 import { GameObject, ControllableBall, PassiveBall } from "./GameObjects";
-import type { Color3, Scene, Texture } from "@babylonjs/core";
+import type { Scene } from "@babylonjs/core";
 
 export interface IGameController {
   startGame(): void;

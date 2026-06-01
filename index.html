@@ -4,145 +4,9 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<link rel="icon" type="image/png" href="/bb_64.png" />
+	<link rel="stylesheet" type="text/css" href="style.css"/>
+	<link rel="stylesheet" type="text/css" href="hub.css"/>
 	<title>Ball Basher</title>
-	<style>
-		body {
-			margin: 0;
-			padding: 0;
-			overflow: hidden;
-			font-family: Arial, sans-serif;
-		}
-
-		#renderCanvas {
-			width: 100%;
-			height: 100vh;
-			display: block;
-		}
-
-		#startMessage,
-		#gameOver {
-			position: absolute;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			color: white;
-			font-size: 24px;
-			background: rgba(0, 0, 0, 0.8);
-			padding: 20px;
-			border-radius: 10px;
-			text-align: center;
-		}
-
-		#ui {
-			position: absolute;
-			top: .25rem;
-			left: .5rem;
-			color: white;
-			width: calc(100% - 1rem);
-			display: flex;
-			flex-direction: row;
-			gap: 1.5rem;
-		}
-		#leaderboard {
-			position: absolute;
-			left: .5rem;
-			top: calc(100% - 20rem);
-			height: calc(20rem - 0.5rem);
-			width: calc(100% - 1rem);
-			margin:0;
-/*			background: rgba(0, 0, 0, 0.6);
-			border: 2px solid rgba(128, 128, 128, 0.6);
-			border-radius: 10px;
-*/
-			text-align: center;
-		}
-
-		.pill {
-			background: rgba(0, 0, 0, 0.8);
-			font-size: 22px;
-			padding: 4px 8px;
-			border-radius: 8px;
-			border: 2px solid rgba(128, 128, 128, 0.8);
-			display: inline-block;
-		}
-
-		.label {
-			margin-right: 1rem;
-			font-weight: normal;
-			color: gray;
-		}
-
-		.value {
-			font-weight: bold;
-		}
-
-		.right-side {
-			margin-left: auto;
-			margin-right: 3rem;
-		}
-	</style>
-	<style>
-		.interactive { pointer-events: auto; }
-
-		/* Unified Control Management UI Panel */
-		.game-panel {
-				border: 2px solid rgba(128, 128, 128, 0.8);
-				border-radius: 8px;
-				max-width: 420px;
-				max-height: calc(100% - 1rem);
-				padding: 8px;
-				box-shadow: 0 20px 40px rgba(0,0,0,0.8);
-				color: #f3f4f6;
-		}
-
-		.panel-header { display: flex; justify-content: space-between; align-items: center; }
-		.panel-title { margin: 0; font-size: 20px; font-weight: bold; color: white; text-transform: uppercase; }
-		
-		.close-icon-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; }
-		.close-icon-btn:hover { color: #f87171; }
-
-		/* Sub-sections elements tracking options layout styling definitions */
-		.auth-block, .game-block {
-			background: #1e293b66;
-			padding: 8px;
-			border-radius: 8px;
-			margin-bottom: 8px;
-			text-align: center;
-		}
-		
-		.google-auth-btn {
-				background: #ffffff; color: #1f2937; border: none; padding: 10px 16px;
-				font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer;
-				display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-		}
-		.google-auth-btn:hover { background: #f3f4f6; }
-
-		.action-button {
-				background: #3b82f6; color: white; border: none; padding: 8px 14px;
-				border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px;
-		}
-		.action-button.danger { background: #ef4444; }
-		.action-button:hover { opacity: 0.9; }
-
-		/* Leaderboard output structured list element definitions */
-		.rank-container { max-height: 200px; overflow-y: auto; border: 1px solid #334155; border-radius: 6px; }
-		.rank-table {
-			width: 100%;
-			border-collapse: collapse;
-			text-align: left;
-			font-size: 14px;
-			background: #1e293b66;
-		}
-		.rank-table th { background: #0f172a; color: #94a3b8; padding: 8px; font-size: 11px; text-transform: uppercase; }
-		.rank-table td { padding: 10px 8px; border-bottom: 1px solid #334155; }
-		
-		.rank-cell { color: #fbbf24; font-weight: bold; width: 15%; }
-		.name-cell { color: #e2e8f0; width: 60%; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-		.score-cell { color: #34d399; font-weight: bold; text-align: right; width: 25%; }
-
-		.center-text { text-align: center; color: white; padding: 12px; }
-		.error-text { color: #f87171; }
-	</style>
 </head>
 
 <body>
@@ -163,7 +27,7 @@
 	<div id="leaderboard">
 		<div id="gamePanel" class="game-panel interactive">
 			<div class="panel-header">
-					<h3 class="panel-title">Game Hub</h3>
+					<h3 class="panel-title">Game Hub (H)</h3>
 					<button id="closePanelBtn" class="close-icon-btn" onclick="document.getElementById('gamePanel').style.display='none'">&times;</button>
 			</div>
 

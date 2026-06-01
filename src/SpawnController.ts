@@ -272,6 +272,7 @@ function createSpawnSequence(scene: Scene): ISpawnActionFactory[] {
 	const xtime = new ExtraTimeFactory(2, 5, new Color3(1, 0, 1), spawnTexture(scene, tex_et))
 	const xball = new ExtraBallFactory(2, 5, new Color3(0, 1, 0), spawnTexture(scene, tex_et))
 	const spawnSequence: ISpawnActionFactory[] = [
+		passive,passive,passive,
 		new MultiplierFactory(2, 5, spawnColor(1), spawnTexture(scene, tex_1x), 1),
 		new MultiplierFactory(2, 5, spawnColor(2), spawnTexture(scene, tex_2x), 2),
 		hole,
@@ -329,7 +330,7 @@ export class SpawnController {
 		this.igc.cubes.forEach(cx => {
 			const action = this.inert.create(cx)
 			if(action instanceof SpawnWithColorAndTexture) {
-				this.initMaterial(action)
+				this.initPbrMaterial(action)
 			}
 			this.spawns.set(cx.name, action)
 			action.execute(this.igc)
@@ -342,7 +343,7 @@ export class SpawnController {
 				const spx = value instanceof SpawnWithCount ? this.inert.create(value.object) : this.spawn(value.object)
 				// transition
 				this.spawns.delete(key)
-				this.crossFade(spx as SpawnWithColorAndTexture, () => {
+				this.crossFadePbr(spx as SpawnWithColorAndTexture, () => {
 					this.spawns.set(key, spx)
 					spx.execute(this.igc)
 				})
@@ -363,6 +364,26 @@ export class SpawnController {
 			nextBaseColor.value = newspawn.color
 			nextTopTexture.texture = newspawn.texture
 			xfade.value = 1.0
+			// This tells the shader to drop its texture sampler cache and immediately bind the new assets
+			mat.markAsDirty(Material.TextureDirtyFlag | Material.MiscDirtyFlag);
+		}
+	}
+	initPbrMaterial(newspawn: SpawnWithColorAndTexture): void {
+		const mat = newspawn.object.material
+		if(mat instanceof NodeMaterial) {
+			const nextBaseColor = mat.getBlockByName("NextColor") as InputBlock
+			const nextMetallic = mat.getBlockByName("NextMetallic") as InputBlock
+			const nextRoughness = mat.getBlockByName("NextRoughness") as InputBlock
+			const nextTopTexture = mat.getBlockByName("NextTexture") as TextureBlock
+			const xfade = mat.getBlockByName("CrossFade") as InputBlock
+			if(!xfade || !nextTopTexture || !nextBaseColor || !nextMetallic || !nextRoughness) return;
+			nextMetallic.value = Math.random()
+			nextRoughness.value = Math.random()
+			nextBaseColor.value = newspawn.color
+			nextTopTexture.texture = newspawn.texture
+			xfade.value = 1.0
+			// This tells the shader to drop its texture sampler cache and immediately bind the new assets
+			mat.markAsDirty(Material.TextureDirtyFlag | Material.MiscDirtyFlag);
 		}
 	}
 	crossFade(newspawn: SpawnWithColorAndTexture, callback: () => void): void {
@@ -375,6 +396,45 @@ export class SpawnController {
 			const xfade = mat.getBlockByName("CrossFade") as InputBlock
 			if(!xfade || !nextTopTexture || !nextBaseColor || !currentTopTexture || !currentBaseColor) return;
 			currentBaseColor.value = nextBaseColor.value
+			currentTopTexture.texture = nextTopTexture.texture
+			nextBaseColor.value = newspawn.color
+			nextTopTexture.texture = newspawn.texture
+			xfade.value = 0.0
+			// This tells the shader to drop its texture sampler cache and immediately bind the new assets
+			mat.markAsDirty(Material.TextureDirtyFlag | Material.MiscDirtyFlag);
+			const xfadeAnim = new Animation("crossFade", "value", 30, Animation.ANIMATIONTYPE_FLOAT)
+			const keys = [
+				{ frame: 0, value: 0 },
+				{ frame: 30, value: 1 }
+			];
+			xfadeAnim.setKeys(keys);
+			// 1. Start forcing the GPU updates immediately before each frame renders
+//			console.log("cross-fade start", newspawn.name, newspawn.object.name)
+			this.igc.scene.beginDirectAnimation(xfade, [xfadeAnim], 0, 30, false, 1, () => {
+//				console.log("cross-fade complete", newspawn.name, newspawn.object.name)
+				callback()
+			});
+		}
+	}
+	crossFadePbr(newspawn: SpawnWithColorAndTexture, callback: () => void): void {
+		const mat = newspawn.object.material
+		if(mat instanceof NodeMaterial) {
+			const currentBaseColor = mat.getBlockByName("CurrentColor") as InputBlock
+			const currentMetallic = mat.getBlockByName("CurrentMetallic") as InputBlock
+			const currentRoughness = mat.getBlockByName("CurrentRoughness") as InputBlock
+			const currentTopTexture = mat.getBlockByName("CurrentTexture") as TextureBlock
+			const nextBaseColor = mat.getBlockByName("NextColor") as InputBlock
+			const nextMetallic = mat.getBlockByName("NextMetallic") as InputBlock
+			const nextRoughness = mat.getBlockByName("NextRoughness") as InputBlock
+			const nextTopTexture = mat.getBlockByName("NextTexture") as TextureBlock
+			const xfade = mat.getBlockByName("CrossFade") as InputBlock
+			if(!xfade || !nextTopTexture || !nextBaseColor || !currentTopTexture || !currentBaseColor || !nextMetallic || !nextRoughness || !currentMetallic || !currentRoughness) {
+				console.warn("crossFadePbr: missing material inputs", newspawn.name, newspawn.object.name)
+				return;
+			}
+			currentBaseColor.value = nextBaseColor.value
+			currentMetallic.value = nextMetallic.value
+			currentRoughness.value = nextRoughness.value
 			currentTopTexture.texture = nextTopTexture.texture
 			nextBaseColor.value = newspawn.color
 			nextTopTexture.texture = newspawn.texture

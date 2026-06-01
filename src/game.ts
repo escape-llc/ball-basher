@@ -7,7 +7,7 @@ import { HavokPlugin } from "@babylonjs/core/Physics/v2/Plugins/havokPlugin";
 import HavokPhysics from "@babylonjs/havok";
 import  { AdvancedDynamicTexture } from "@babylonjs/gui";
 import {
-	Color3, Color4, CubeTexture, FreeCamera, HemisphericLight, Material, MeshBuilder, NodeMaterial, PBRMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
+	Color3, Color4, CubeTexture, FreeCamera, GlowLayer, HemisphericLight, Material, MeshBuilder, NodeMaterial, PBRMaterial, PhysicsAggregate, PhysicsMotionType, PhysicsShapeType,
 	StandardMaterial, 
 	Texture, 
 	type IPhysicsCollisionEvent,
@@ -16,7 +16,8 @@ import { setGuiTexture, UIManager } from "./UIManager";
 import { GameState, type IGameStateListener } from "./GameState";
 import { GameObject, ControllableBall, GameCube, PassiveBall } from "./GameObjects";
 import type { IGameController } from "./GameController";
-import cubeMaterial from "./assets/crossFadeMaterial.json";
+import crossFadeMaterial from "./assets/crossFadeMaterial.json";
+import pbrCrossFadeMaterial from "./assets/pbrCrossFadeMaterial.json";
 import { SpawnController } from "./SpawnController";
 import tex_albedo from "./assets/albedo.png";
 import tex_bump from "./assets/distortion.png";
@@ -45,15 +46,19 @@ class GameController implements IGameController, IGameStateListener {
 	private havok: HavokPlugin
 	private camera: FreeCamera
 	private light: HemisphericLight
+	private glow: GlowLayer
 	private uim: UIManager
 	private floorColor: Color3 = Color3.FromHSV(20, 0.75, 0.6)
 	private floorMaterial: StandardMaterial|null = null
 	private cubeMaterial: NodeMaterial|null = null
 	private spawner: SpawnController
-	constructor(scene: Scene, havok: HavokPlugin, uim: UIManager) {
+	private glowColor: Color3 = Color3.FromHSV(120, 0.7, 0.5)
+	private passiveGlowColor: Color3 = Color3.FromHSV(240, 0.7, 0.5)
+	constructor(scene: Scene, havok: HavokPlugin, glow: GlowLayer, uim: UIManager) {
 		this.scene = scene
 		this.state = new GameState(this, this)
 		this.havok = havok
+		this.glow = glow
 		const camera = this.createCamera(scene)
 		const light = new HemisphericLight("light", new Vector3(0, 1, -1), scene)
 		this.camera = camera
@@ -86,7 +91,7 @@ class GameController implements IGameController, IGameStateListener {
 				this.uim.gravity(state.currentGravity);
 				this.scene.getPhysicsEngine()?.setGravity(state.currentGravity);
 				this.floorColor = Color3.FromHSV((state.round * 18) % 360, 0.75, 0.6);
-				if(this.floorMaterial) this.floorMaterial.diffuseColor = this.floorColor;
+//				if(this.floorMaterial) this.floorMaterial.diffuseColor = this.floorColor;
 				break;
 			case "scorePoints":
 				this.uim.score(state.score);
@@ -118,12 +123,21 @@ class GameController implements IGameController, IGameStateListener {
 		if(!this.scene) return;
 		this.state = new GameState(this, this);
 		this.state.startGame();
-		this.controllableBalls.forEach(ball => ball.respawn());
+		this.controllableBalls.forEach(ball => {
+			ball.respawn()
+			// Convert the body into a live, moving object
+			ball.body.body.setMotionType(PhysicsMotionType.DYNAMIC);
+			// Wake up Havok's solver for this object
+			const currentPosition = ball.body.transformNode.absolutePosition;
+			const zeroImpulse = new Vector3(0, 0, 0);
+			ball.body.body.applyImpulse(zeroImpulse, currentPosition);
+		});
 		this.passiveBalls.forEach(ball => ball.dispose())
 		this.passiveBalls = []
 		this.spawner.start()
-		this.floorColor = Color3.FromHSV((this.state.round * 18) % 360, 0.75, 0.6);
-		this.floorMaterial && (this.floorMaterial.diffuseColor = this.floorColor);
+//		this.floorColor = Color3.FromHSV((this.state.round * 18) % 360, 0.75, 0.6);
+//		this.floorMaterial && (this.floorMaterial.diffuseColor = this.floorColor);
+		gamePanel.displayPanel(false);
 	}
 	pauseGame(): void {
 		throw new Error("Method not implemented.");
@@ -132,15 +146,38 @@ class GameController implements IGameController, IGameStateListener {
 		throw new Error("Method not implemented.");
 	}
 	endGame(): void {
-		throw new Error("Method not implemented.");
+		gamePanel.displayPanel(true);
+		gamePanel.submitScore(this.state.score)
+		.then(() => {
+			console.log("Score submitted successfully.");
+		})
+		.catch(err => {
+			console.error("Error submitting score:", err);
+		});
+	}
+	massFor(radius: number, density = 1): number {
+		return (4/3) * Math.PI * Math.pow(radius, 3) * density;
 	}
 	spawnPassiveBall(): void {
-		const ball = MeshBuilder.CreateSphere("passiveBall", { diameter: Math.random() * 0.5 + 0.4 }, this.scene);
+		const radius = (Math.random() * 1.5 + 0.4)/2;
+		const density = 2 + Math.random() * 20;
+		const mass = this.massFor(radius, density)
+		const ball = MeshBuilder.CreateSphere("passiveBall", { diameter: radius*2 }, this.scene);
 		ball.position.set(0, 2, 0);
+		const ballProps = {
+			mass,
+			restitution: Math.random() * 0.25 + 0.25,
+			linearDamping: 0.2,
+			angularDamping: 0.2,
+			friction: Math.random() * 0.2 + 0.2
+		}
 		const material = new StandardMaterial("passiveMat", this.scene);
-		material.diffuseColor = Color3.FromHSV(Math.random() * 360, 0.8, 0.6);
+		material.diffuseColor = Color3.FromHSV(
+			(density * 360) % 360,
+			Math.min(1, Math.max(0.4, 0.5 + ballProps.restitution)),
+			Math.min(1, Math.max(0.4, 0.6 + ballProps.friction))
+		);
 		ball.material = material;
-		const ballProps = { mass: Math.random() * 0.5 + 0.1, restitution: 0.5, linearDamping: 0.2, angularDamping: 0.2, friction: 0.2 }
 		const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, this.scene);
 		body.body.setCollisionCallbackEnabled(true);
 		body.body.getCollisionObservable().add(event => {
@@ -156,15 +193,18 @@ class GameController implements IGameController, IGameStateListener {
 			const hitMesh = hitBody.transformNode
 			if(hitMesh.name === "floor" || hitMesh.name === "base") return
 			// look up object
-			const obj:GameObject|undefined = this.gameObjects.get(hitMesh.name)
+			let obj:GameObject|undefined = this.gameObjects.get(hitMesh.name)
 			//console.log("hit: " + hitMesh.name, obj)
+			if(!obj) {
+				obj = this.passiveBalls.find(ball => ball.name === hitMesh.name);
+			}
 			if (!obj) return
 			const go = obj as GameCube
 			this.spawner.collision(go, event)
 	}
 	applyForce(force: Vector3): void {
 		const fx = force.scale(this.state.forceMultiplier * this.force_multiplier);
-		this.controllableBalls.forEach(ball => { ball.applyImpulse(fx); });
+		this.controllableBalls.forEach(ball => { if(!ball.isGlowing)ball.applyImpulse(fx); });
 	}
 	adjustGravity(): void {
 		const gmx = (Math.random() - 0.5) * 2;
@@ -172,12 +212,56 @@ class GameController implements IGameController, IGameStateListener {
 		this.state.adjustGravity(new Vector3(gmx, 0, gmz));
 	}
 	startGameLoop(): void {
+		this.scene.onBeforeActiveMeshesEvaluationObservable.add(() => {
+			this.controllableBalls.forEach(ball => {
+				if(!ball.isTouchingFloor()) {
+					if(!ball.isGlowing) {
+						console.log("Adding glow to ball", ball.name);
+						ball.isGlowing = true;
+						(ball.mesh.material as PBRMaterial).emissiveColor = this.glowColor;
+						this.glow.addIncludedOnlyMesh(ball.mesh);
+					}
+				}
+				else {
+					if(ball.isGlowing) {
+						console.log("Stopping glow to ball", ball.name);
+						ball.isGlowing = false;
+						(ball.mesh.material as PBRMaterial).emissiveColor = new Color3(0, 0, 0);
+						this.glow.removeIncludedOnlyMesh(ball.mesh);
+					}
+				}
+			});
+			this.passiveBalls.forEach(ball => {
+				if(!ball.isTouchingFloor()) {
+					if(!ball.isGlowing) {
+						ball.isGlowing = true;
+						(ball.mesh.material as PBRMaterial).emissiveColor = this.passiveGlowColor;
+						this.glow.addIncludedOnlyMesh(ball.mesh);
+					}
+				}
+				else {
+					if(ball.isGlowing) {
+						ball.isGlowing = false;
+						(ball.mesh.material as PBRMaterial).emissiveColor = new Color3(0, 0, 0);
+						this.glow.removeIncludedOnlyMesh(ball.mesh);
+					}
+				}
+			});
+		});
 		engine.runRenderLoop(() => {
 			this.renderLoop();
 		});
 	}
+	private async createCrossFadeMaterial(): Promise<NodeMaterial> {
+		const mat = await NodeMaterial.Parse(crossFadeMaterial, this.scene);
+		return mat;
+	}
+	private async createPbrCrossFadeMaterial(): Promise<NodeMaterial> {
+		const mat = await NodeMaterial.Parse(pbrCrossFadeMaterial, this.scene);
+		return mat;
+	}
 	async createGameObjects(): Promise<void> {
-		const mat = await NodeMaterial.Parse(cubeMaterial, this.scene);
+		const mat = await this.createPbrCrossFadeMaterial();
 		console.log("Parsed material", mat);
 		this.cubeMaterial = mat;
 		this.createPlayArea();
@@ -230,8 +314,8 @@ class GameController implements IGameController, IGameStateListener {
 		// Floor
 		const floor = MeshBuilder.CreateGround("floor", { width: 20, height: 10 }, this.scene);
 		floor.position.y = 0;
-		this.floorMaterial = new StandardMaterial("floorMat", this.scene);
-		this.floorMaterial.diffuseColor = this.floorColor;
+//		this.floorMaterial = new StandardMaterial("floorMat", this.scene);
+//		this.floorMaterial.diffuseColor = this.floorColor;
 //		floor.material = this.floorMaterial;
 		floor.material = this.pbrGroundMaterial(this.scene) ?? this.floorMaterial;
 		const floorProps = {
@@ -310,26 +394,29 @@ class GameController implements IGameController, IGameStateListener {
 		const hue = [10, 180, 280];
 		const diameters = [0.9, 0.7, 0.5];
 		const masses = [13, 9, 7];
-		const restitution = [0.3, 0.6, 0.3];
+		const restitution = [0.35, 0.6, 0.3];
 		const friction = [0.1, 0.3, 0.4];
-		const linearDamping = [0.1, 0.3, 0.5];
+		const linearDamping = [0.15, 0.3, 0.5];
 		for (let ix = 0; ix < 3; ix++) {
 			const name = "ball" + ix
 			const ball = MeshBuilder.CreateSphere(name, { diameter: diameters[ix] }, this.scene);
 			const spawn = new Vector3(ix, 2, 0);
 			ball.position.set(ix, 2, 0);
 			const material = new PBRMaterial("Mat-" + name, this.scene);
-			material.metallic = 0.6;
+			material.metallic = 0.7;
 			material.roughness = 0.2;
-			material.albedoColor = Color3.FromHSV(hue[ix], 0.7, 0.6);
+			material.albedoColor = Color3.FromHSV(hue[ix], 0.85, 0.7);
 			ball.material = material;
 			const ballProps = {
-				mass: masses[ix], restitution: restitution[ix], linearDamping: linearDamping[ix], angularDamping: 0.2, friction: friction[ix]
+				mass: masses[ix],
+				restitution: restitution[ix],
+				linearDamping: linearDamping[ix],
+				angularDamping: 0.2,
+				friction: friction[ix]
 			};
 			const body = new PhysicsAggregate(ball, PhysicsShapeType.SPHERE, ballProps, this.scene);
 			body.body.setCollisionCallbackEnabled(true);
 			body.body.getCollisionObservable().add(event => {
-				//console.log("Collision detected", event);
 				this.commonCollisionAction(event);
 			});
 			const go = new ControllableBall(name, ball, body, this)
@@ -344,8 +431,10 @@ class GameController implements IGameController, IGameStateListener {
 			return;
 		}
 		const deltaTime = this.state.getDeltaTime() ?? 0;
-		applyForce();
-//		this.cubes.forEach(cube => cube.update(deltaTime));
+		const forceVector = getForceVector();
+		this.applyForce(forceVector);
+
+		//		this.cubes.forEach(cube => cube.update(deltaTime));
 		this.spawner.update(deltaTime)
 		this.state.updateTimeRemaining(deltaTime);
 
@@ -373,13 +462,7 @@ class GameController implements IGameController, IGameStateListener {
 		if(this.state.isGameOver()) {
 			this.gameOver = true;
 			this.uim.gameOver(true);
-			gamePanel.submitScore(this.state.score)
-			.then(() => {
-				console.log("Score submitted successfully.");
-			})
-			.catch(err => {
-				console.error("Error submitting score:", err);
-			});
+			this.endGame();
 		}
 	}
 	private static createScene(physicsPlugin: HavokPlugin) {
@@ -397,7 +480,8 @@ class GameController implements IGameController, IGameStateListener {
 		const scene = GameController.createScene(havokPlugin);
 		setGuiTexture(AdvancedDynamicTexture.CreateFullscreenUI("UI"));
 		scene.createDefaultEnvironment({ createSkybox: false, createGround: false });
-		const gc = new GameController(scene, havokPlugin, uim);
+		const glowLayer = new GlowLayer("glowLayer", scene);
+		const gc = new GameController(scene, havokPlugin, glowLayer, uim);
 		await gc.createGameObjects();
 		return gc;
 	}
@@ -433,7 +517,7 @@ game.startGameLoop();
 gamePanel.refreshLeaderboard();
 
 // Apply force to controllable balls
-function applyForce() {
+function getForceVector() {
 	// Simple input handling
 	forceVector.x = 0;
 	forceVector.y = 0;
@@ -443,5 +527,5 @@ function applyForce() {
 	if (keys.ArrowUp || keys.KeyW) forceVector.z = 1;
 	if (keys.ArrowDown || keys.KeyS) forceVector.z = -1;
 //	if (forceVector.length() < 0.01) return; // Dead zone
-	game.applyForce(forceVector);
+	return forceVector;
 }

@@ -49,7 +49,7 @@ export class GamePanel {
 		toggleBtn?.addEventListener("click", () => this.togglePanelVisibility());
 
 		window.addEventListener("keydown", (e: KeyboardEvent) => {
-			if (e.key.toLowerCase() === "l") {
+			if (e.key.toLowerCase() === "h") {
 				this.togglePanelVisibility();
 			}
 		});
@@ -88,7 +88,12 @@ export class GamePanel {
 			this.statusText.innerText = "Status: Not Signed In";
 		}
 	}
-
+	public displayPanel(show: boolean): void {
+		this.panelContainer.style.display = show ? "block" : "none";
+		if(show) {
+			this.refreshLeaderboard();
+		}
+	}
 	/**
 	 * Spawns a clean, centered popup window directing users safely to Google OAuth
 	 */

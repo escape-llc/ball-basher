@@ -1,0 +1,78 @@
+		body {
+			margin: 0;
+			padding: 0;
+			overflow: hidden;
+			font-family: Arial, sans-serif;
+			background: black;
+		}
+
+		#renderCanvas {
+			position: absolute;
+			left: 0;
+			top: .25rem;
+			width: 100%;
+			height: calc(100vh - 0.25rem);
+			display: block;
+		}
+
+		#startMessage,
+		#gameOver {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			color: white;
+			font-size: 24px;
+			background: rgba(0, 0, 0, 0.8);
+			padding: 20px;
+			border-radius: 10px;
+			text-align: center;
+		}
+
+		#ui {
+			position: absolute;
+			top: .25rem;
+			left: .5rem;
+			color: white;
+			width: calc(100% - 1rem);
+			display: flex;
+			flex-direction: row;
+			gap: 1.5rem;
+		}
+		#leaderboard {
+			position: absolute;
+			left: .5rem;
+			top: calc(100% - 20rem);
+			height: calc(20rem - 0.5rem);
+			width: calc(100% - 1rem);
+			margin:0;
+/*			background: rgba(0, 0, 0, 0.6);
+			border: 2px solid rgba(128, 128, 128, 0.6);
+			border-radius: 10px;
+*/
+			text-align: center;
+		}
+
+		.pill {
+			background: rgba(0, 0, 0, 0.8);
+			font-size: 18px;
+			padding: 4px 4px;
+			border-radius: 8px;
+			border: 2px solid rgba(128, 128, 128, 0.8);
+			display: inline-block;
+		}
+
+		.label {
+			margin-right: 1rem;
+			font-weight: normal;
+			color: gray;
+		}
+
+		.value {
+			font-weight: bold;
+		}
+
+		.right-side {
+			margin-left: auto;
+			margin-right: 3rem;
+		}
